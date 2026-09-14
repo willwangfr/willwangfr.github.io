@@ -49,7 +49,7 @@ window.SITE = {
     "mentoring a handful of student research projects on LLM psychometrics + AI evals",
     "still tinkering on moodspace and youtube music mapper",
     "working on [slop labs](https://omegapoint.space/) with [Cody Hergenroeder](https://codyh.xyz): personality in language models",
-    "in the works: joining [replicater labs](https://replicater.xyz/) and [coherence health](https://www.coherencehealth.io/)",
+    "in the works: joining [replicater labs](https://replicater.xyz/)",
     "djing when i get the chance",
   ],
 
@@ -267,16 +267,6 @@ window.SITE = {
       invite: "know a pre-med or a high schooler who wants help getting into med school? send them my way, or have them reach out through t20consulting.com.",
       inviteWho: "pre-meds, high schoolers + anyone with a referral",
       inviteUrl: "mailto:wwang719@usc.edu?subject=t20%20consulting%20referral",
-    },
-    {
-      id: "coherence-health", kind: "company",
-      title: "coherence health", year: "2026", status: "in the works",
-      oneLiner: "physician-led, AI-built care for chronic symptoms that looks for root causes like gut health, inflammation, nutrients and stress. it's starting with women 35+ dealing with exhaustion, brain fog and thyroid issues.",
-      details: [
-        "founded by Kush Sharma with Patrick Hanaway MD, and backed by a16z speedrun. they're hiring engineers, clinicians and AI researchers.",
-        "i haven't officially joined yet. it's in the works.",
-      ],
-      links: [{ label: "coherencehealth.io", url: "https://www.coherencehealth.io/" }],
     },
     {
       id: "replicater-labs", kind: "company",
