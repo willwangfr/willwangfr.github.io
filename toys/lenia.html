@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lenia — continuous cellular automata</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.31.0/tabler-icons.min.css">
+<style>
+:root{
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,monospace;
+  --color-text-primary:#eef2ff; --color-text-secondary:#9aa3c4; --color-text-tertiary:#6b7396;
+  --color-background-secondary:#161a2e;
+  --color-border-tertiary:rgba(150,160,200,0.16); --color-border-secondary:rgba(150,160,200,0.3);
+  --border-radius-md:8px; --border-radius-lg:12px; --lenia-disp:560px;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#0a0c1c;color:var(--color-text-primary);font-family:var(--font-sans);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 18px;gap:14px}
+h1{font-size:22px;font-weight:500;margin:0;letter-spacing:0.2px}
+.sub{font-size:13px;color:var(--color-text-secondary);margin:0 0 6px;text-align:center;max-width:640px;line-height:1.6}
+.frame{width:100%;max-width:880px}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;background:rgba(150,160,200,0.25);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#1da69c;cursor:pointer}
+select,button{font-family:inherit;color:var(--color-text-primary);background:rgba(150,160,200,0.08);
+  border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer}
+button:hover,select:hover{background:rgba(150,160,200,0.16)}
+button:active{transform:scale(0.97)}
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.lenia-wrap{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;padding:0.5rem 0;font-family:var(--font-sans)}
+.lenia-stage{position:relative;flex:0 0 auto}
+#lenia-cv{display:block;width:var(--lenia-disp);height:var(--lenia-disp);max-width:100%;border-radius:var(--border-radius-lg);border:0.5px solid var(--color-border-secondary);background:#05071a;cursor:crosshair;touch-action:none}
+.lenia-hint{position:absolute;left:11px;bottom:11px;font-size:12px;color:rgba(238,242,255,0.6);pointer-events:none;display:flex;align-items:center;gap:5px}
+.lenia-panel{flex:1 1 224px;min-width:212px;display:flex;flex-direction:column;gap:11px}
+.lenia-btns{display:flex;gap:6px;flex-wrap:wrap}
+.lenia-btns button{flex:1 1 60px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 6px;font-size:12px}
+.lenia-btns button i{font-size:15px}
+.lenia-ctl{display:flex;flex-direction:column;gap:4px}
+.lenia-ctl label{font-size:12px;color:var(--color-text-secondary)}
+.lenia-row{display:flex;align-items:center;gap:8px}
+.lenia-row input[type=range]{flex:1;min-width:0}
+.lenia-row span{font-size:12px;font-family:var(--font-mono);color:var(--color-text-primary);min-width:46px;text-align:right}
+.lenia-plots{display:flex;gap:10px;margin-top:2px}
+.lenia-plots>div{display:flex;flex-direction:column;align-items:center;gap:4px}
+.lenia-plots canvas{border-radius:6px;background:#05071a;border:0.5px solid var(--color-border-tertiary)}
+.lenia-plots span{font-size:11px;color:var(--color-text-tertiary)}
+.lenia-stats{display:flex;gap:8px;margin-top:2px}
+.lenia-stats>div{flex:1;background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:6px 9px;display:flex;flex-direction:column;gap:1px}
+.lenia-stats span{font-size:11px;color:var(--color-text-secondary)}
+.lenia-stats b{font-size:16px;font-weight:500;font-family:var(--font-mono);color:var(--color-text-primary)}
+</style></head>
+<body>
+<h1>Lenia</h1>
+<p class="sub">A continuous cellular automaton. Conway's Game of Life lives on a discrete on/off grid; Lenia replaces it with a smooth field, a ring-shaped kernel, and a smooth growth function — and out of that continuity swim lifelike creatures. The default is <em>Orbium</em>, a self-stabilizing glider.</p>
+<div class="frame">
+<h2 class="sr-only">Interactive Lenia: a continuous cellular automaton whose smooth rules grow lifelike gliding creatures.</h2>
+<div class="lenia-wrap">
+  <div class="lenia-stage">
+    <canvas id="lenia-cv" aria-label="Lenia simulation field"></canvas>
+    <div class="lenia-hint"><i class="ti ti-brush" aria-hidden="true"></i> drag on the field to paint life</div>
+  </div>
+  <div class="lenia-panel">
+    <div class="lenia-btns">
+      <button id="lenia-play" aria-label="play or pause"><i class="ti ti-player-pause" aria-hidden="true"></i><span id="lenia-play-t">pause</span></button>
+      <button id="lenia-step" aria-label="single step"><i class="ti ti-player-track-next" aria-hidden="true"></i><span>step</span></button>
+      <button id="lenia-reset" aria-label="reset current creature"><i class="ti ti-refresh" aria-hidden="true"></i><span>reset</span></button>
+      <button id="lenia-soup" aria-label="random soup"><i class="ti ti-droplet" aria-hidden="true"></i><span>soup</span></button>
+      <button id="lenia-clear" aria-label="clear field"><i class="ti ti-trash" aria-hidden="true"></i><span>clear</span></button>
+    </div>
+    <div class="lenia-ctl"><label for="lenia-creature">creature</label>
+      <select id="lenia-creature"></select></div>
+    <div class="lenia-ctl"><label>growth center &mu;</label>
+      <div class="lenia-row"><input type="range" id="lenia-mu" min="0.05" max="0.30" step="0.001"><span id="lenia-mu-v"></span></div></div>
+    <div class="lenia-ctl"><label>growth width &sigma;</label>
+      <div class="lenia-row"><input type="range" id="lenia-sg" min="0.004" max="0.05" step="0.0005"><span id="lenia-sg-v"></span></div></div>
+    <div class="lenia-ctl"><label>speed (steps / frame)</label>
+      <div class="lenia-row"><input type="range" id="lenia-sp" min="1" max="4" step="1" value="1"><span id="lenia-sp-v"></span></div></div>
+    <div class="lenia-ctl"><label>brush size</label>
+      <div class="lenia-row"><input type="range" id="lenia-br" min="2" max="14" step="1" value="6"><span id="lenia-br-v"></span></div></div>
+    <div class="lenia-plots">
+      <div><canvas id="lenia-kernel"></canvas><span>kernel K(r)</span></div>
+      <div><canvas id="lenia-growth"></canvas><span>growth G(u)</span></div>
+    </div>
+    <div class="lenia-stats">
+      <div><span>generation</span><b id="lenia-gen">0</b></div>
+      <div><span>mass</span><b id="lenia-mass">0</b></div>
+      <div><span>fps</span><b id="lenia-fps">0</b></div>
+    </div>
+  </div>
+</div></div>
+<script>// Verified single-ring Lenia creatures (decoded from Bert Chan's animals.json)
+const CREATURES = {
+  "O2u": {name:"Orbium unicaudatus", R:13, T:10.0, mu:0.15, sigma:0.015, cells:[[0,0,0,0,0,0,0,0.051,0.016,0,0,0,0,0,0,0.235,0,0,0,0],[0,0,0,0,0,0,0.137,0.208,0.212,0.082,0.071,0.098,0.102,0.071,0.004,0.255,0,0,0,0],[0,0,0,0,0,0.086,0.267,0.357,0.384,0.341,0.188,0.184,0.173,0.184,0.176,0.106,0.349,0,0,0],[0,0,0,0,0.012,0.067,0.349,0.455,0.467,0.38,0.129,0.078,0.055,0.063,0.122,0.216,0.706,0,0,0],[0,0,0,0.035,0.129,0.184,0.341,0.404,0.384,0.282,0.133,0,0,0,0,0.047,0.4,0.329,0,0],[0.004,0,0.016,0.137,0.169,0.133,0.11,0.247,0.271,0.263,0.208,0,0,0,0,0,0.02,0.863,0,0],[0.235,0,0.102,0.173,0.078,0,0,0.2,0.31,0.369,0.373,0.239,0,0,0,0,0,0.455,0.157,0],[0,0.122,0.184,0.11,0,0,0,0.271,0.427,0.506,0.537,0.51,0,0,0,0,0,0,0.518,0],[0,0.588,0.216,0.031,0,0,0,0.188,0.529,0.635,0.682,0.682,0.42,0,0,0,0,0,0.427,0],[0,0.553,0.235,0,0,0,0,0.027,0.62,0.757,0.839,0.855,0.808,0.106,0,0,0,0,0.282,0.098],[0,0,0.596,0,0,0,0,0,0.667,0.875,0.961,0.992,0.973,0.561,0,0,0,0,0.224,0.141],[0,0,0.839,0,0,0,0,0,0.506,0.969,1,1,1,0.914,0.278,0,0,0.024,0.22,0.133],[0,0,0.553,0.075,0,0,0,0,0.333,1,1,0.98,1,0.973,0.557,0.157,0.051,0.118,0.243,0.086],[0,0,0.031,0.447,0,0,0,0,0.176,0.851,1,0.894,0.863,0.867,0.651,0.333,0.196,0.216,0.231,0.039],[0,0,0,0.424,0.114,0,0,0,0.114,0.62,0.878,0.824,0.78,0.741,0.612,0.408,0.294,0.267,0.165,0],[0,0,0,0.078,0.333,0.075,0,0,0.118,0.424,0.675,0.722,0.678,0.627,0.525,0.404,0.31,0.224,0.063,0],[0,0,0,0,0.165,0.259,0.149,0.118,0.173,0.337,0.498,0.557,0.545,0.498,0.427,0.337,0.243,0.118,0,0],[0,0,0,0,0,0.145,0.231,0.235,0.259,0.318,0.388,0.424,0.412,0.361,0.306,0.227,0.125,0.02,0,0],[0,0,0,0,0,0,0.071,0.169,0.227,0.251,0.275,0.278,0.259,0.231,0.165,0.094,0.02,0,0,0],[0,0,0,0,0,0,0,0,0.059,0.102,0.129,0.133,0.118,0.078,0.043,0,0,0,0,0]]},
+  "O2b": {name:"Orbium bicaudatus", R:13, T:10.0, mu:0.15, sigma:0.014, cells:[[0,0,0,0,0,0,0,0,0,0,0,0,0,0.137,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.275,0,0,0,0,0],[0,0,0,0,0,0,0.086,0.098,0,0.051,0.114,0.137,0.129,0.078,0.275,0,0,0,0,0],[0,0,0,0,0.008,0.157,0.149,0.318,0.302,0.204,0.184,0.153,0.141,0.176,0.243,0.737,0,0,0,0],[0,0,0,0,0.035,0.259,0.337,0.439,0.42,0.22,0.039,0,0,0,0.027,0.247,0.576,0,0,0],[0,0,0,0,0.078,0.329,0.455,0.345,0.329,0.169,0,0,0,0,0,0,0.647,0.016,0,0],[0,0,0,0.075,0.184,0.243,0.29,0.235,0.165,0.251,0.208,0,0,0,0,0,0,0.663,0,0],[0,0,0.024,0.173,0.145,0.047,0.125,0.251,0.22,0.369,0.439,0.357,0,0,0,0,0,0.271,0.192,0],[0.043,0,0.106,0.165,0.027,0,0.02,0.306,0.447,0.463,0.639,0.627,0.243,0,0,0,0,0.012,0.353,0],[0.098,0,0.173,0.082,0,0,0,0.373,0.573,0.635,0.753,0.831,0.796,0.118,0,0,0,0,0.294,0.031],[0,0.533,0.22,0.031,0,0,0,0.212,0.663,0.835,0.839,0.98,0.984,0.808,0.047,0,0,0.016,0.235,0.071],[0,0.122,0.404,0.004,0,0,0,0,0.722,0.922,0.957,0.867,1,1,0.596,0.075,0,0.094,0.227,0.078],[0,0,0.882,0.02,0,0,0,0,0.388,0.973,1,0.706,0.729,0.965,0.859,0.404,0.18,0.188,0.216,0.063],[0,0,0.086,0.459,0,0,0,0,0.016,0.914,1,0.745,0.639,0.769,0.82,0.573,0.333,0.263,0.2,0.024],[0,0,0,0.686,0,0,0,0,0,0.49,0.984,0.839,0.694,0.702,0.71,0.557,0.376,0.267,0.145,0],[0,0,0,0,0.459,0,0,0,0,0.212,0.675,0.804,0.714,0.647,0.58,0.459,0.325,0.204,0.059,0],[0,0,0,0,0.2,0.298,0.039,0,0,0.157,0.42,0.592,0.596,0.529,0.443,0.337,0.231,0.106,0,0],[0,0,0,0,0,0.173,0.267,0.18,0.149,0.212,0.322,0.404,0.42,0.369,0.298,0.212,0.118,0.016,0,0],[0,0,0,0,0,0,0.067,0.2,0.227,0.251,0.275,0.282,0.259,0.22,0.153,0.078,0.012,0,0,0],[0,0,0,0,0,0,0,0,0.047,0.09,0.118,0.114,0.094,0.063,0.027,0,0,0,0,0]]},
+  "O2ui": {name:"Orbium unicaudatus ignis", R:13, T:10.0, mu:0.11, sigma:0.012, cells:[[0,0,0,0,0,0,0,0,0.016,0.063,0.094,0.082,0.016,0,0,0,0,0,0,0],[0,0,0,0,0,0.118,0.239,0.259,0.173,0.184,0.196,0.196,0.204,0.188,0.008,0,0,0,0,0],[0,0,0,0,0.031,0.314,0.424,0.369,0.212,0.173,0.133,0.094,0.106,0.169,0.239,0.424,0,0,0,0],[0,0,0,0.082,0.184,0.357,0.286,0.2,0.137,0.067,0.004,0,0,0,0.075,0.251,0.463,0,0,0],[0,0,0.102,0.192,0.208,0.192,0.169,0.129,0.149,0,0,0,0,0,0,0.012,0.451,0,0,0],[0,0.02,0.184,0.192,0.129,0.067,0.102,0.275,0.337,0.235,0,0,0,0,0,0,0,0.812,0,0],[0,0.129,0.2,0.094,0.008,0,0,0.345,0.459,0.459,0.212,0,0,0,0,0,0,0.082,0,0],[0,0.188,0.165,0,0,0,0,0.396,0.573,0.608,0.561,0,0,0,0,0,0,0,0.604,0],[0.063,0.22,0.098,0,0,0,0,0.361,0.643,0.714,0.71,0.518,0,0,0,0,0,0,0.259,0],[0.016,0.263,0.059,0,0,0,0,0,0.675,0.8,0.835,0.788,0,0,0,0,0,0,0,0.149],[0,0.502,0.043,0,0,0,0,0,0.647,0.855,0.929,0.937,0.494,0,0,0,0,0,0,0.231],[0,0.671,0.059,0,0,0,0,0,0.047,0.898,1,1,0.925,0,0,0,0,0,0,0.216],[0,0,0.149,0,0,0,0,0,0,0.584,1,1,1,0.431,0,0,0,0,0.075,0.176],[0,0,0.835,0,0,0,0,0,0,0.012,0.914,1,1,0.749,0.227,0,0,0,0.169,0.137],[0,0,0.031,0,0,0,0,0,0,0,0.553,0.925,0.925,0.827,0.592,0.31,0.176,0.192,0.208,0.071],[0,0,0,0.518,0,0,0,0,0,0,0.329,0.769,0.816,0.761,0.663,0.498,0.349,0.271,0.161,0],[0,0,0,0.012,0.263,0,0,0,0,0,0.282,0.643,0.69,0.604,0.51,0.416,0.306,0.184,0.071,0],[0,0,0,0,0.133,0.2,0,0,0,0.035,0.322,0.525,0.51,0.4,0.302,0.231,0.153,0.075,0,0],[0,0,0,0,0,0.106,0.216,0.149,0.145,0.208,0.325,0.376,0.318,0.22,0.149,0.11,0.063,0.012,0,0],[0,0,0,0,0,0,0.031,0.149,0.192,0.216,0.227,0.208,0.153,0.11,0.063,0.043,0.004,0,0,0],[0,0,0,0,0,0,0,0,0.02,0.063,0.075,0.067,0.055,0.035,0.012,0,0,0,0,0]]},
+  "OG2g": {name:"Gyrorbium gyrans", R:13, T:10.0, mu:0.156, sigma:0.0224, cells:[[0,0,0,0,0,0,0,0,0,0,0.02,0.047,0.067,0.067,0.047,0.02,0,0,0,0,0],[0,0,0,0,0,0,0,0.078,0.176,0.22,0.22,0.2,0.188,0.176,0.149,0.118,0.047,0,0,0,0],[0,0,0,0,0.039,0.369,0.549,0.608,0.627,0.608,0.518,0.376,0.267,0.22,0.2,0.157,0.11,0.027,0,0,0],[0,0,0,0.278,0.486,0.259,0.137,0.208,0.427,0.659,0.667,0.498,0.286,0.188,0.176,0.169,0.129,0.059,0,0,0],[0,0,0.349,0.337,0,0,0,0,0.098,0.569,0.729,0.549,0.318,0.176,0.129,0.137,0.118,0.059,0,0,0],[0,0.169,0.427,0,0,0,0,0,0,0.51,0.776,0.62,0.439,0.4,0.369,0.157,0.11,0.047,0,0,0],[0,0.588,0.008,0,0,0,0,0,0,0.51,1,1,0.988,0.988,1,0.957,0.42,0.047,0,0,0],[0.11,0.576,0,0,0,0,0,0,0.118,0.937,1,1,1,0.788,0.769,0.91,0.91,0.22,0,0,0],[0.337,0.557,0,0,0,0,0,0.02,0.427,0.859,0.976,1,0.847,0.51,0.427,0.51,0.776,0.659,0,0,0],[0.408,0.639,0.086,0,0,0,0.02,0.11,0.718,0.776,0.867,0.82,0.447,0.259,0.22,0.22,0.4,0.749,0.02,0,0],[0.349,0.698,0.467,0.157,0.067,0.137,0.169,0.2,0.678,0.667,0.576,0.11,0,0,0,0.008,0.11,0.498,0.349,0,0],[0.188,0.608,0.71,0.627,0.518,0.467,0.388,0.318,0.576,0.478,0.357,0,0,0,0,0,0,0.278,0.349,0,0],[0.02,0.42,0.678,0.847,0.949,0.8,0.557,0.369,0.388,0.298,0.22,0,0,0,0,0,0,0.188,0.31,0,0],[0,0.22,0.557,0.886,1,0.82,0.349,0.149,0.227,0.157,0.086,0,0,0,0,0,0,0.227,0.208,0,0],[0,0.039,0.459,0.898,1,0.376,0,0,0,0,0,0,0,0,0,0,0.118,0.259,0.039,0,0],[0,0,0.349,0.91,0.788,0.129,0,0,0,0,0,0,0,0,0,0.137,0.227,0.078,0,0,0],[0,0,0.227,0.867,0.627,0.137,0.008,0,0,0,0,0,0,0,0.2,0.157,0,0,0,0,0],[0,0,0.02,0.718,0.71,0.157,0.059,0,0,0,0,0,0.078,0.31,0.22,0,0,0,0,0,0],[0,0,0,0.388,1,0.208,0.129,0.059,0.02,0.008,0.059,0.22,0.208,0.447,0.498,0,0,0,0,0,0],[0,0,0,0,0.898,0.427,0.227,0.2,0.188,0.227,0.259,0.129,0.247,0.576,0.478,0.4,0,0,0,0,0],[0,0,0,0,0,0.91,0.286,0.267,0.239,0.169,0.02,0,0.357,0.427,0.329,0.259,0.22,0.086,0,0.078,0.169],[0,0,0,0,0,0,0.678,0.298,0.02,0,0,0.086,0.157,0.008,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0.129,0.337,0.22,0.137,0.067,0,0,0,0,0,0,0,0,0]]},
+};
+
+
+(function(){
+  const N = 130, R = 13, disp = 560;
+  let mu = 0.15, sigma = 0.015, dt = 0.1, stepsPerFrame = 1, brush = 6, running = true, current = 'O2u', gen = 0;
+  let A = new Float32Array(N*N), B = new Float32Array(N*N), U = new Float32Array(N*N);
+  let tdx, tdy, tw, kmax = 1;
+
+  function buildKernel(){
+    const dxs=[], dys=[], ws=[]; let raw=[], sum=0;
+    for(let dy=-R; dy<=R; dy++) for(let dx=-R; dx<=R; dx++){
+      const r = Math.sqrt(dx*dx+dy*dy)/R;
+      const v = (r>0 && r<1) ? Math.exp(4 - 1/(r*(1-r))) : 0;
+      if(v>0.02){ raw.push([dx,dy,v]); sum+=v; }
+    }
+    kmax = 0;
+    for(const t of raw){ const w=t[2]/sum; dxs.push(t[0]); dys.push(t[1]); ws.push(w); if(w>kmax) kmax=w; }
+    tdx = Int16Array.from(dxs); tdy = Int16Array.from(dys); tw = Float32Array.from(ws);
+  }
+  buildKernel();
+
+  const palette = (function(){
+    const stops = [[0,6,8,24],[0.12,26,16,70],[0.30,64,32,128],[0.46,40,96,166],
+                   [0.62,22,166,156],[0.78,92,212,124],[0.90,202,240,98],[1,250,252,222]];
+    const p = new Uint8Array(256*3);
+    for(let i=0;i<256;i++){
+      const t=i/255; let a=stops[0], b=stops[stops.length-1];
+      for(let s=0;s<stops.length-1;s++){ if(t>=stops[s][0] && t<=stops[s+1][0]){ a=stops[s]; b=stops[s+1]; break; } }
+      const f=(t-a[0])/((b[0]-a[0])||1);
+      p[i*3]=a[1]+(b[1]-a[1])*f; p[i*3+1]=a[2]+(b[2]-a[2])*f; p[i*3+2]=a[3]+(b[3]-a[3])*f;
+    }
+    return p;
+  })();
+
+  const cv = document.getElementById('lenia-cv');
+  cv.width = disp; cv.height = disp;
+  const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = true;
+  const off = document.createElement('canvas'); off.width = N; off.height = N;
+  const octx = off.getContext('2d');
+  const img = octx.createImageData(N, N);
+
+  function step(){
+    U.fill(0);
+    for(let k=0;k<tw.length;k++){
+      const dx=tdx[k], dy=tdy[k], wk=tw[k];
+      const offx=((dx%N)+N)%N, cut=N-offx;
+      for(let y=0;y<N;y++){
+        let sy=y+dy; if(sy<0) sy+=N; else if(sy>=N) sy-=N;
+        const ub=y*N, ab=sy*N;
+        for(let x=0;x<cut;x++) U[ub+x]+=wk*A[ab+offx+x];
+        for(let x=cut;x<N;x++) U[ub+x]+=wk*A[ab+x-cut];
+      }
+    }
+    const inv=1/(2*sigma*sigma);
+    for(let i=0;i<N*N;i++){
+      const u=U[i], g=2*Math.exp(-(u-mu)*(u-mu)*inv)-1;
+      let a=A[i]+dt*g; a=a<0?0:a>1?1:a; B[i]=a;
+    }
+    const t=A; A=B; B=t; gen++;
+  }
+
+  function render(){
+    const d=img.data;
+    for(let i=0;i<N*N;i++){
+      let v=A[i]; if(v<0)v=0; else if(v>1)v=1;
+      const idx=(v*255)|0, j=i*4, p=idx*3;
+      d[j]=palette[p]; d[j+1]=palette[p+1]; d[j+2]=palette[p+2]; d[j+3]=255;
+    }
+    octx.putImageData(img,0,0);
+    ctx.drawImage(off, 0,0,N,N, 0,0,disp,disp);
+  }
+
+  function loadCreature(code){
+    const c = CREATURES[code]; current = code;
+    mu = c.mu; sigma = c.sigma;
+    document.getElementById('lenia-mu').value = mu;
+    document.getElementById('lenia-sg').value = sigma;
+    A.fill(0);
+    const cells=c.cells, h=cells.length, w=cells[0].length;
+    const r0=(N-h)>>1, c0=(N-w)>>1;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++) A[(r0+y)*N+(c0+x)]=cells[y][x];
+    gen=0; syncLabels(); drawGrowth();
+  }
+
+  function soup(){
+    A.fill(0);
+    const m=Math.floor(N*0.32);
+    for(let y=m;y<N-m;y++) for(let x=m;x<N-m;x++) A[y*N+x]=Math.random();
+    for(let pass=0; pass<2; pass++){
+      const C=A.slice();
+      for(let y=1;y<N-1;y++) for(let x=1;x<N-1;x++){
+        let s=0; for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++) s+=C[(y+a)*N+(x+b)];
+        A[y*N+x]=s/9;
+      }
+    }
+    gen=0;
+  }
+
+  function paint(cx,cy){
+    const br=brush, sg=Math.max(1,br*0.62), s2=2*sg*sg;
+    for(let dy=-br;dy<=br;dy++) for(let dx=-br;dx<=br;dx++){
+      const r2=dx*dx+dy*dy; if(r2>br*br) continue;
+      const x=((cx+dx)%N+N)%N, y=((cy+dy)%N+N)%N, i=y*N+x;
+      const v=A[i]+Math.exp(-r2/s2)*0.92; A[i]=v>1?1:v;
+    }
+  }
+
+  // ---- mini plots ----
+  const kc=document.getElementById('lenia-kernel'); kc.width=128; kc.height=128;
+  kc.style.width='64px'; kc.style.height='64px';
+  const kctx=kc.getContext('2d');
+  (function drawKernel(){
+    const D=2*R+1, im=document.createElement('canvas'); im.width=D; im.height=D;
+    const ic=im.getContext('2d'), idata=ic.createImageData(D,D);
+    for(let i=0;i<D*D;i++){ idata.data[i*4]=5; idata.data[i*4+1]=7; idata.data[i*4+2]=26; idata.data[i*4+3]=255; }
+    for(let k=0;k<tw.length;k++){
+      const x=tdx[k]+R, y=tdy[k]+R, t=tw[k]/kmax, idx=(t*255)|0, p=idx*3, j=(y*D+x)*4;
+      idata.data[j]=palette[p]; idata.data[j+1]=palette[p+1]; idata.data[j+2]=palette[p+2]; idata.data[j+3]=255;
+    }
+    ic.putImageData(idata,0,0);
+    kctx.imageSmoothingEnabled=true; kctx.drawImage(im,0,0,D,D,0,0,128,128);
+  })();
+
+  const gc=document.getElementById('lenia-growth'); gc.width=256; gc.height=128;
+  gc.style.width='128px'; gc.style.height='64px';
+  const gx=gc.getContext('2d');
+  function drawGrowth(){
+    const W=256, H=128; gx.clearRect(0,0,W,H);
+    gx.fillStyle='#05071a'; gx.fillRect(0,0,W,H);
+    const umax=0.45;
+    gx.strokeStyle='rgba(160,170,210,0.28)'; gx.lineWidth=1;
+    gx.beginPath(); gx.moveTo(0,H/2); gx.lineTo(W,H/2); gx.stroke();   // G=0 line
+    const mux=mu/umax*W;
+    gx.strokeStyle='rgba(202,240,98,0.55)';
+    gx.beginPath(); gx.moveTo(mux,0); gx.lineTo(mux,H); gx.stroke();   // mu marker
+    gx.strokeStyle='#1da69c'; gx.lineWidth=2; gx.beginPath();
+    const inv=1/(2*sigma*sigma);
+    for(let px=0;px<=W;px++){
+      const u=px/W*umax, g=2*Math.exp(-(u-mu)*(u-mu)*inv)-1, y=H/2-(g*0.5)*(H*0.92);
+      if(px===0) gx.moveTo(px,y); else gx.lineTo(px,y);
+    }
+    gx.stroke();
+  }
+
+  // ---- ui wiring ----
+  function syncLabels(){
+    document.getElementById('lenia-mu-v').textContent = mu.toFixed(3);
+    document.getElementById('lenia-sg-v').textContent = sigma.toFixed(4);
+    document.getElementById('lenia-sp-v').textContent = stepsPerFrame;
+    document.getElementById('lenia-br-v').textContent = brush;
+  }
+  const sel=document.getElementById('lenia-creature');
+  for(const code in CREATURES){ const o=document.createElement('option'); o.value=code; o.textContent=CREATURES[code].name; sel.appendChild(o); }
+  sel.value='O2u';
+  sel.addEventListener('change', e=>loadCreature(e.target.value));
+  const playBtn=document.getElementById('lenia-play');
+  function setRun(r){ running=r; playBtn.innerHTML = (r ? '<i class="ti ti-player-pause" aria-hidden="true"></i><span>pause</span>' : '<i class="ti ti-player-play" aria-hidden="true"></i><span>play</span>'); }
+  playBtn.addEventListener('click', ()=>setRun(!running));
+  document.getElementById('lenia-step').addEventListener('click', ()=>{ setRun(false); step(); render(); });
+  document.getElementById('lenia-reset').addEventListener('click', ()=>loadCreature(current));
+  document.getElementById('lenia-soup').addEventListener('click', ()=>{ soup(); setRun(true); });
+  document.getElementById('lenia-clear').addEventListener('click', ()=>{ A.fill(0); gen=0; });
+  document.getElementById('lenia-mu').addEventListener('input', e=>{ mu=parseFloat(e.target.value); syncLabels(); drawGrowth(); });
+  document.getElementById('lenia-sg').addEventListener('input', e=>{ sigma=parseFloat(e.target.value); syncLabels(); drawGrowth(); });
+  document.getElementById('lenia-sp').addEventListener('input', e=>{ stepsPerFrame=parseInt(e.target.value); syncLabels(); });
+  document.getElementById('lenia-br').addEventListener('input', e=>{ brush=parseInt(e.target.value); syncLabels(); });
+
+  // pointer painting
+  let painting=false;
+  function pos(ev){ const r=cv.getBoundingClientRect(); const cx=Math.floor((ev.clientX-r.left)/r.width*N); const cy=Math.floor((ev.clientY-r.top)/r.height*N); return [cx,cy]; }
+  cv.addEventListener('pointerdown', e=>{ painting=true; cv.setPointerCapture(e.pointerId); const[x,y]=pos(e); paint(x,y); });
+  cv.addEventListener('pointermove', e=>{ if(painting){ const[x,y]=pos(e); paint(x,y); } });
+  cv.addEventListener('pointerup', ()=>painting=false);
+  cv.addEventListener('pointerleave', ()=>painting=false);
+
+  // ---- main loop ----
+  loadCreature('O2u'); setRun(true); syncLabels();
+  let last=performance.now(), frames=0;
+  function frame(now){
+    if(running){ for(let s=0;s<stepsPerFrame;s++) step(); }
+    render(); frames++;
+    if(now-last>=500){
+      const fps=frames*1000/(now-last); frames=0; last=now;
+      let mass=0; for(let i=0;i<N*N;i++) mass+=A[i];
+      document.getElementById('lenia-gen').textContent=gen;
+      document.getElementById('lenia-mass').textContent=Math.round(mass);
+      document.getElementById('lenia-fps').textContent=Math.round(fps);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();</script>
+</body></html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Boids — flocking</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #070912;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: #e8e8ee; -webkit-font-smoothing: antialiased; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+  #panel {
+    position: fixed; top: 16px; left: 16px; width: 270px; max-height: calc(100% - 32px);
+    overflow-y: auto; padding: 16px 18px 18px; border-radius: 16px;
+    background: rgba(14, 16, 26, 0.72); border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 10; transition: transform .3s ease, opacity .3s ease;
+  }
+  #panel.hidden { transform: translateX(-110%); opacity: 0; pointer-events: none; }
+  #panel h1 { font-size: 15px; font-weight: 600; margin: 0 0 2px; letter-spacing: .2px; }
+  #panel .sub { font-size: 11.5px; color: #9a9aa8; margin: 0 0 14px; line-height: 1.5; }
+
+  .row { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .row label { font-size: 11.5px; color: #b6b6c4; flex: 0 0 62px; }
+  .row output { font-size: 11.5px; color: #fff; flex: 0 0 30px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px;
+    background: rgba(255,255,255,0.14); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+    background: #fff; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  input[type=range]::-moz-range-thumb { width: 15px; height: 15px; border: none; border-radius: 50%; background: #fff; cursor: pointer; }
+
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 4px 0 14px; }
+  button.act { font: inherit; font-size: 12px; color: #e8e8ee; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 9px; padding: 8px 6px; cursor: pointer;
+    transition: background .15s, transform .05s; }
+  button.act:hover { background: rgba(255,255,255,0.13); }
+  button.act:active { transform: scale(0.97); }
+  button.act.wide { grid-column: 1 / -1; }
+  button.act.on { background: rgba(255,77,77,0.26); border-color: rgba(255,120,120,0.5); color: #ffd9d9; }
+
+  .sechead { font-size: 11px; color: #76768a; text-transform: uppercase; letter-spacing: .08em; margin: 14px 0 9px; }
+  .hint { font-size: 10.5px; color: #6f6f80; margin-top: 12px; line-height: 1.5; }
+  .stats { font-size: 10.5px; color: #6f6f80; margin-top: 10px; display: flex; justify-content: space-between;
+    font-variant-numeric: tabular-nums; }
+
+  #toggle { position: fixed; top: 16px; left: 16px; z-index: 11; width: 38px; height: 38px; border-radius: 10px;
+    background: rgba(14,16,26,0.72); border: 1px solid rgba(255,255,255,0.12); color: #e8e8ee; cursor: pointer;
+    font-size: 17px; display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  #panel.hidden ~ #toggle { display: flex; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>Boids &mdash; flocking</h1>
+  <p class="sub">Three rules per bird: avoid crowding, match heading, steer toward the centre. A flock is what emerges.</p>
+
+  <div class="btns">
+    <button class="act wide" id="bPred">Release a predator</button>
+    <button class="act" id="bScatter">Scatter</button>
+    <button class="act" id="bReset">Reset</button>
+    <button class="act wide" id="bPause">Pause</button>
+  </div>
+
+  <div class="sechead">The three rules</div>
+  <div class="row"><label>Separation</label><input type="range" id="sSep" min="0" max="3" step="0.1" value="1.6"><output id="oSep">1.6</output></div>
+  <div class="row"><label>Alignment</label><input type="range" id="sAli" min="0" max="3" step="0.1" value="1"><output id="oAli">1.0</output></div>
+  <div class="row"><label>Cohesion</label><input type="range" id="sCoh" min="0" max="3" step="0.1" value="0.9"><output id="oCoh">0.9</output></div>
+
+  <div class="sechead">Flock</div>
+  <div class="row"><label>Birds</label><input type="range" id="sN" min="100" max="2000" step="50" value="800"><output id="oN">800</output></div>
+  <div class="row"><label>Flocks</label><input type="range" id="sFl" min="1" max="4" step="1" value="1"><output id="oFl">1</output></div>
+  <div class="row"><label>Vision</label><input type="range" id="sVis" min="25" max="100" step="5" value="55"><output id="oVis">55</output></div>
+  <div class="row"><label>Speed</label><input type="range" id="sSpd" min="1.5" max="6" step="0.1" value="3.2"><output id="oSpd">3.2</output></div>
+  <div class="row"><label>Trails</label><input type="range" id="sT" min="0" max="92" step="1" value="45"><output id="oT">45</output></div>
+
+  <div class="hint">Move your mouse to lure the flock; hold to pull harder. Release a predator to set off scatter waves.</div>
+  <div class="stats"><span id="stFps">&mdash; fps</span><span id="stN">&mdash;</span></div>
+</div>
+<button id="toggle" title="Show controls">&#9776;</button>
+
+<script>
+"use strict";
+(function () {
+  const FLOCK_COLORS = ["#cfe0ff", "#74e0bf", "#ffd27f", "#ff9bb3"];
+  const PRED_COLOR = "#ff5252";
+  const TAU = Math.PI * 2;
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let W = 0, H = 0, dpr = 1, scale = 1;
+  let n = 800, flocks = 1;
+  let sepW = 1.6, aliW = 1.0, cohW = 0.9;
+  let visionRef = 55, speedRef = 3.2, fade = 0.55;
+  let paused = false;
+
+  // reference (at 1280px wide) constants, scaled by `scale` each frame
+  const FORCE_REF = 0.08, MARGIN_REF = 90, TURN_REF = 0.35, SIZE_REF = 3.0;
+  const SEP_FRAC = 0.45, MINSPD_FRAC = 0.5;
+  const PRED_SPEED_REF = 3.5, FEAR_REF = 120, MOUSE_REF = 230;
+
+  let x, y, vx, vy, nvx, nvy, flock;
+  let pred = { x: 0, y: 0, vx: 0, vy: 0, on: false };
+
+  // grid
+  let cell = 1, cols = 0, rows = 0, gridSize = -1, head = null, nextArr = new Int32Array(n);
+
+  let mouseX = 0, mouseY = 0, mouseActive = false, mouseDown = false;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function seed() {
+    x = new Float32Array(n); y = new Float32Array(n);
+    vx = new Float32Array(n); vy = new Float32Array(n);
+    nvx = new Float32Array(n); nvy = new Float32Array(n);
+    flock = new Int8Array(n); nextArr = new Int32Array(n);
+    const sp = speedRef * scale;
+    for (let i = 0; i < n; i++) {
+      x[i] = rand(0, W); y[i] = rand(0, H);
+      const a = rand(0, TAU);
+      vx[i] = Math.cos(a) * sp; vy[i] = Math.sin(a) * sp;
+      flock[i] = (Math.random() * flocks) | 0;
+    }
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = Math.max(window.innerWidth || 0, 320), cssH = Math.max(window.innerHeight || 0, 240);
+    const ow = W, oh = H;
+    W = Math.round(cssW * dpr); H = Math.round(cssH * dpr);
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+    scale = W / 1280;
+    if (x && ow > 0 && oh > 0) {
+      const sx = W / ow, sy = H / oh;
+      for (let i = 0; i < n; i++) { x[i] *= sx; y[i] *= sy; }
+      pred.x *= sx; pred.y *= sy;
+    } else { pred.x = W * 0.5; pred.y = H * 0.5; }
+    ctx.fillStyle = "#070912"; ctx.fillRect(0, 0, W, H);
+  }
+
+  function ensureGrid(vision) {
+    cell = Math.max(1, vision);
+    cols = Math.max(1, Math.floor(W / cell));
+    rows = Math.max(1, Math.floor(H / cell));
+    const size = cols * rows;
+    if (size !== gridSize) { head = new Int32Array(size); gridSize = size; }
+  }
+
+  function limit(vxv, vyv, max) {
+    const m2 = vxv * vxv + vyv * vyv;
+    if (m2 > max * max) { const m = max / Math.sqrt(m2); return [vxv * m, vyv * m]; }
+    return [vxv, vyv];
+  }
+
+  function step() {
+    const vision = visionRef * scale, vision2 = vision * vision;
+    const sepR = vision * SEP_FRAC, sepR2 = sepR * sepR;
+    const maxSpd = speedRef * scale, minSpd = maxSpd * MINSPD_FRAC;
+    const maxF = FORCE_REF * scale;
+    const margin = MARGIN_REF * scale, turn = TURN_REF * scale;
+    const fearR = FEAR_REF * scale, fearR2 = fearR * fearR;
+    const mouseR = MOUSE_REF * scale, mouseR2 = mouseR * mouseR;
+
+    ensureGrid(vision);
+    head.fill(-1);
+    for (let i = 0; i < n; i++) {
+      let gx = Math.floor(x[i] / cell); if (gx < 0) gx = 0; else if (gx >= cols) gx = cols - 1;
+      let gy = Math.floor(y[i] / cell); if (gy < 0) gy = 0; else if (gy >= rows) gy = rows - 1;
+      const c = gy * cols + gx;
+      nextArr[i] = head[c]; head[c] = i;
+    }
+
+    for (let i = 0; i < n; i++) {
+      const xi = x[i], yi = y[i], fi = flock[i];
+      let gx = Math.floor(xi / cell); if (gx < 0) gx = 0; else if (gx >= cols) gx = cols - 1;
+      let gy = Math.floor(yi / cell); if (gy < 0) gy = 0; else if (gy >= rows) gy = rows - 1;
+
+      let aliX = 0, aliY = 0, cohX = 0, cohY = 0, cnt = 0, sepX = 0, sepY = 0;
+      const gx0 = gx > 0 ? gx - 1 : 0, gx1 = gx < cols - 1 ? gx + 1 : cols - 1;
+      const gy0 = gy > 0 ? gy - 1 : 0, gy1 = gy < rows - 1 ? gy + 1 : rows - 1;
+      for (let cy = gy0; cy <= gy1; cy++) {
+        const base = cy * cols;
+        for (let cx = gx0; cx <= gx1; cx++) {
+          for (let j = head[base + cx]; j >= 0; j = nextArr[j]) {
+            if (j === i) continue;
+            const dx = x[j] - xi, dy = y[j] - yi, d2 = dx * dx + dy * dy;
+            if (d2 > vision2) continue;
+            if (flock[j] === fi) { aliX += vx[j]; aliY += vy[j]; cohX += x[j]; cohY += y[j]; cnt++; }
+            if (d2 < sepR2 && d2 > 0) { const d = Math.sqrt(d2); sepX -= dx / d; sepY -= dy / d; }
+          }
+        }
+      }
+
+      let accX = 0, accY = 0;
+      if (cnt > 0) {
+        let am = Math.sqrt(aliX * aliX + aliY * aliY);
+        if (am > 0) { let s = limit((aliX / am) * maxSpd - vx[i], (aliY / am) * maxSpd - vy[i], maxF); accX += s[0] * aliW; accY += s[1] * aliW; }
+        let cdx = cohX / cnt - xi, cdy = cohY / cnt - yi, cm = Math.sqrt(cdx * cdx + cdy * cdy);
+        if (cm > 0) { let s = limit((cdx / cm) * maxSpd - vx[i], (cdy / cm) * maxSpd - vy[i], maxF); accX += s[0] * cohW; accY += s[1] * cohW; }
+      }
+      if (sepX !== 0 || sepY !== 0) {
+        const sm = Math.sqrt(sepX * sepX + sepY * sepY);
+        let s = limit((sepX / sm) * maxSpd - vx[i], (sepY / sm) * maxSpd - vy[i], maxF);
+        accX += s[0] * sepW; accY += s[1] * sepW;
+      }
+
+      if (pred.on) {
+        const dx = xi - pred.x, dy = yi - pred.y, d2 = dx * dx + dy * dy;
+        if (d2 < fearR2 && d2 > 0) { const d = Math.sqrt(d2), w = (1 - d / fearR); accX += (dx / d) * maxF * 8 * w; accY += (dy / d) * maxF * 8 * w; }
+      }
+      if (mouseActive) {
+        const dx = mouseX - xi, dy = mouseY - yi, d2 = dx * dx + dy * dy;
+        if (d2 < mouseR2 && d2 > 1) { const d = Math.sqrt(d2); let s = limit((dx / d) * maxSpd - vx[i], (dy / d) * maxSpd - vy[i], maxF); const w = (mouseDown ? 3.5 : 1.3); accX += s[0] * w; accY += s[1] * w; }
+      }
+
+      let nx = vx[i] + accX, ny = vy[i] + accY;
+      if (xi < margin) nx += turn; else if (xi > W - margin) nx -= turn;
+      if (yi < margin) ny += turn; else if (yi > H - margin) ny -= turn;
+      let sp2 = nx * nx + ny * ny;
+      if (sp2 > maxSpd * maxSpd) { const m = maxSpd / Math.sqrt(sp2); nx *= m; ny *= m; }
+      else if (sp2 < minSpd * minSpd && sp2 > 0) { const m = minSpd / Math.sqrt(sp2); nx *= m; ny *= m; }
+      nvx[i] = nx; nvy[i] = ny;
+    }
+
+    for (let i = 0; i < n; i++) {
+      vx[i] = nvx[i]; vy[i] = nvy[i];
+      let px = x[i] + vx[i], py = y[i] + vy[i];
+      if (px < 0) { px = 0; vx[i] = Math.abs(vx[i]); } else if (px > W) { px = W; vx[i] = -Math.abs(vx[i]); }
+      if (py < 0) { py = 0; vy[i] = Math.abs(vy[i]); } else if (py > H) { py = H; vy[i] = -Math.abs(vy[i]); }
+      x[i] = px; y[i] = py;
+    }
+
+    if (pred.on) {
+      let bi = -1, bd = Infinity;
+      for (let i = 0; i < n; i++) { const dx = x[i] - pred.x, dy = y[i] - pred.y, d2 = dx * dx + dy * dy; if (d2 < bd) { bd = d2; bi = i; } }
+      const pmax = PRED_SPEED_REF * scale, pf = FORCE_REF * scale * 1.5;
+      let ax = 0, ay = 0;
+      if (bi >= 0) { const dx = x[bi] - pred.x, dy = y[bi] - pred.y, d = Math.sqrt(dx * dx + dy * dy) || 1; let s = limit((dx / d) * pmax - pred.vx, (dy / d) * pmax - pred.vy, pf); ax = s[0]; ay = s[1]; }
+      pred.vx += ax; pred.vy += ay;
+      const margin = MARGIN_REF * scale, turn = TURN_REF * scale;
+      if (pred.x < margin) pred.vx += turn; else if (pred.x > W - margin) pred.vx -= turn;
+      if (pred.y < margin) pred.vy += turn; else if (pred.y > H - margin) pred.vy -= turn;
+      let s2 = pred.vx * pred.vx + pred.vy * pred.vy;
+      if (s2 > pmax * pmax) { const m = pmax / Math.sqrt(s2); pred.vx *= m; pred.vy *= m; }
+      pred.x += pred.vx; pred.y += pred.vy;
+      if (pred.x < 0) pred.x = 0; else if (pred.x > W) pred.x = W;
+      if (pred.y < 0) pred.y = 0; else if (pred.y > H) pred.y = H;
+    }
+  }
+
+  function tri(px, py, dx, dy, s) {
+    let sp = Math.sqrt(dx * dx + dy * dy); if (sp < 1e-4) { dx = 1; dy = 0; sp = 1; }
+    const ux = dx / sp, uy = dy / sp, ex = -uy, ey = ux;
+    ctx.moveTo(px + ux * s * 2, py + uy * s * 2);
+    ctx.lineTo(px - ux * s + ex * s, py - uy * s + ey * s);
+    ctx.lineTo(px - ux * s - ex * s, py - uy * s - ey * s);
+    ctx.closePath();
+  }
+
+  function render() {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(7,9,18," + fade + ")";
+    ctx.fillRect(0, 0, W, H);
+    const s = Math.max(2, SIZE_REF * scale);
+    for (let f = 0; f < flocks; f++) {
+      ctx.fillStyle = FLOCK_COLORS[f];
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) { if (flock[i] !== f) continue; tri(x[i], y[i], vx[i], vy[i], s); }
+      ctx.fill();
+    }
+    if (pred.on) {
+      ctx.fillStyle = PRED_COLOR;
+      ctx.beginPath(); tri(pred.x, pred.y, pred.vx, pred.vy, s * 2.4); ctx.fill();
+    }
+  }
+
+  let lastFps = performance.now(), frames = 0;
+  function loop() {
+    if (!paused) step();
+    render();
+    frames++;
+    const now = performance.now();
+    if (now - lastFps >= 500) { document.getElementById("stFps").textContent = Math.round(frames * 1000 / (now - lastFps)) + " fps"; frames = 0; lastFps = now; }
+    requestAnimationFrame(loop);
+  }
+
+  function scatter() {
+    const sp = speedRef * scale * 2.2;
+    for (let i = 0; i < n; i++) { const a = rand(0, TAU); vx[i] += Math.cos(a) * sp; vy[i] += Math.sin(a) * sp; }
+  }
+
+  canvas.addEventListener("pointermove", e => { const r = canvas.getBoundingClientRect(); const k = W / r.width; mouseX = (e.clientX - r.left) * k; mouseY = (e.clientY - r.top) * k; mouseActive = true; });
+  canvas.addEventListener("pointerdown", () => { mouseDown = true; mouseActive = true; });
+  window.addEventListener("pointerup", () => { mouseDown = false; });
+  canvas.addEventListener("pointerleave", () => { mouseActive = false; mouseDown = false; });
+
+  function bind(id, oid, fn, fmt) { const el = document.getElementById(id), o = document.getElementById(oid); el.addEventListener("input", () => { fn(parseFloat(el.value)); o.textContent = fmt ? fmt(el.value) : el.value; }); }
+  bind("sSep", "oSep", v => sepW = v, x => (+x).toFixed(1));
+  bind("sAli", "oAli", v => aliW = v, x => (+x).toFixed(1));
+  bind("sCoh", "oCoh", v => cohW = v, x => (+x).toFixed(1));
+  bind("sN", "oN", v => { n = v | 0; seed(); document.getElementById("stN").textContent = n + " birds"; });
+  bind("sFl", "oFl", v => { flocks = v | 0; for (let i = 0; i < n; i++) flock[i] = (Math.random() * flocks) | 0; });
+  bind("sVis", "oVis", v => { visionRef = v; gridSize = -1; });
+  bind("sSpd", "oSpd", v => speedRef = v, x => (+x).toFixed(1));
+  bind("sT", "oT", v => fade = Math.max(0.04, 1 - v / 100));
+
+  const predBtn = document.getElementById("bPred");
+  predBtn.addEventListener("click", () => { pred.on = !pred.on; if (pred.on) { pred.x = rand(0, W); pred.y = rand(0, H); pred.vx = 0; pred.vy = 0; } predBtn.textContent = pred.on ? "Remove predator" : "Release a predator"; predBtn.classList.toggle("on", pred.on); });
+  document.getElementById("bScatter").addEventListener("click", scatter);
+  document.getElementById("bReset").addEventListener("click", seed);
+  const pauseBtn = document.getElementById("bPause");
+  pauseBtn.addEventListener("click", () => { paused = !paused; pauseBtn.textContent = paused ? "Play" : "Pause"; });
+
+  const panel = document.getElementById("panel"), toggle = document.getElementById("toggle");
+  toggle.addEventListener("click", () => panel.classList.remove("hidden"));
+  document.addEventListener("keydown", e => {
+    if (e.key === " ") { paused = !paused; pauseBtn.textContent = paused ? "Play" : "Pause"; e.preventDefault(); }
+    else if (e.key === "p" || e.key === "P") predBtn.click();
+    else if (e.key === "s" || e.key === "S") scatter();
+    else if (e.key === "h" || e.key === "H") panel.classList.toggle("hidden");
+  });
+  window.addEventListener("resize", resize);
+
+  resize();
+  seed();
+  document.getElementById("stN").textContent = n + " birds";
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

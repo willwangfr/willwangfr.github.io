@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>startup ideas · William Wang</title>
+  <meta name="description" content="Startup ideas William Wang is interested in but not actively building. If you're working on one, get in touch.">
+  <meta property="og:title" content="startup ideas · William Wang">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f2eee4'/%3E%3Cpath d='M4 36h14l5-14 8 28 6-20 4 6h19' fill='none' stroke='%23c23b26' stroke-width='5' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .rfs { max-width: 780px; margin: 0 auto; padding: clamp(28px, 6vw, 72px) var(--pad) 90px; }
+    .rfs h1 { font: 400 clamp(56px, 10vw, 112px)/0.88 var(--serif); letter-spacing: -0.03em; margin: 14px 0 22px; }
+    .rfs h1 em { color: var(--red); }
+    .rfs-intro p { font-size: clamp(17px, 1.8vw, 20px); line-height: 1.45; margin: 0 0 14px; max-width: 58ch; }
+    .rfs-intro .hero-cta { margin: 22px 0 10px; }
+    .rfs-item { padding: 34px 0 30px; border-top: 1px solid var(--rule); }
+    .rfs-item:first-child { border-top-color: var(--ink); }
+    .rfs-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font: 500 12px var(--mono); color: var(--idea); }
+    .rfs-item h2 { font: 400 clamp(30px, 4.4vw, 44px)/1.02 var(--serif); letter-spacing: -0.01em; margin: 8px 0 14px; }
+    .rfs-item p { font-size: 17px; margin: 0 0 12px; max-width: 62ch; text-wrap: pretty; }
+    .rfs-item .why { color: var(--ink-2); }
+    .rfs-item .who { font: 400 13px var(--mono); color: var(--ink-2); }
+    .rfs-actions { display: flex; flex-wrap: wrap; gap: 16px; font: 400 13px var(--mono); margin-top: 14px; }
+    .rfs-dropped { margin-top: 44px; }
+  </style>
+</head>
+<body>
+  <main class="rfs">
+    <a class="btn ghost" href="./">← back to the site</a>
+    <p class="sec-num" style="margin-top: 40px">requests for startups /</p>
+    <h1>startup <em>ideas</em></h1>
+    <div class="rfs-intro" id="intro"></div>
+    <div id="list"></div>
+    <div class="rfs-dropped" id="dropped"></div>
+  </main>
+  <footer class="foot" id="foot"></footer>
+
+  <script src="content.js"></script>
+  <script>
+    (() => {
+      'use strict';
+      const S = window.SITE;
+      if (!S) return;
+      const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      const rich = (v) => esc(v).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, t, u) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
+      const mailto = (subject) => `mailto:${S.person.email}?subject=${encodeURIComponent(subject)}`;
+      const ideas = (S.items || []).filter((i) => i.kind === 'idea');
+
+      document.getElementById('intro').innerHTML = `
+        <p>problems i'd love to see solved. i'm not actively building any of these right now.</p>
+        <p>if you're working on one, or you've thought about it way more than i have, i want to hear about it. i'm happy to help or intro you to people.</p>
+        <div class="hero-cta"><a class="btn" href="${esc(mailto('startup ideas'))}">email me →</a></div>`;
+
+      document.getElementById('list').innerHTML = ideas
+        .map((it, i) => {
+          const links = (it.links || [])
+            .filter((l) => /^https:\/\//.test(l.url))
+            .map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`)
+            .join('');
+          return `
+            <article class="rfs-item" id="${esc(it.id)}">
+              <div class="rfs-top"><span>rfs-${String(i + 1).padStart(2, '0')}</span>${it.status ? `<span class="status">${esc(it.status)}</span>` : ''}</div>
+              <h2>${esc(it.title)}</h2>
+              <p>${rich(it.oneLiner)}</p>
+              ${it.why ? `<p class="why">${rich(it.why)}</p>` : ''}
+              ${it.inviteWho ? `<p class="who">would love to hear from: ${esc(it.inviteWho)}</p>` : ''}
+              <div class="rfs-actions">
+                <a href="${esc(mailto(`re: ${it.title}`))}">building this? let's talk →</a>
+                ${links}
+              </div>
+            </article>`;
+        })
+        .join('');
+
+      const dropped = S.droppedIdeas || [];
+      document.getElementById('dropped').innerHTML = dropped.length
+        ? `<h3 class="sub">ideas i dropped</h3><ul class="dropped">${dropped
+            .map((d) => `<li><b>${esc(d.title)}</b><span>${esc(d.why)}</span></li>`)
+            .join('')}</ul>`
+        : '';
+
+      document.getElementById('foot').innerHTML = `<span>last updated ${esc(S.updated)}</span><span><a href="./">william wang</a></span>`;
+    })();
+  </script>
+</body>
+</html>

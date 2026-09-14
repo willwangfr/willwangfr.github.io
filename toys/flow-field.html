@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Flow field</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #04060a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: #e8e8ee; -webkit-font-smoothing: antialiased; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel { position: fixed; top: 16px; left: 16px; width: 230px; padding: 15px 17px 16px; border-radius: 16px;
+    background: rgba(14,14,22,0.66); border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 10; transition: opacity .6s ease; }
+  #panel.fade { opacity: 0; pointer-events: none; }
+  #panel h1 { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+  .pals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px; }
+  .pal { height: 26px; border-radius: 7px; cursor: pointer; border: 1.5px solid transparent; }
+  .pal.sel { border-color: #fff; }
+  .row { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .row label { font-size: 11.5px; color: #b6b6c4; flex: 0 0 56px; }
+  .row output { font-size: 11.5px; color: #fff; flex: 0 0 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #fff; cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 15px; height: 15px; border: none; border-radius: 50%; background: #fff; cursor: pointer; }
+  .hint { font-size: 10px; color: #6f6f80; margin-top: 9px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>Flow field</h1>
+  <div class="pals" id="pals"></div>
+  <div class="row"><label>View</label><select id="sStyle" style="flex:1;background:rgba(255,255,255,0.06);color:#e8e8ee;border:1px solid rgba(255,255,255,0.14);border-radius:7px;padding:4px 6px;font:inherit;font-size:11.5px;outline:none"></select></div>
+  <div class="row"><label>Calm</label><input type="range" id="sSpd" min="0.4" max="3" step="0.1" value="1.2"><output id="oSpd">1.2</output></div>
+  <div class="row"><label>Density</label><input type="range" id="sN" min="400" max="4000" step="100" value="1800"><output id="oN">1800</output></div>
+  <div class="row"><label>Trails</label><input type="range" id="sTr" min="60" max="98" step="1" value="95"><output id="oTr">95</output></div>
+  <div class="row"><label>Max fps</label><input type="range" id="sFps" min="15" max="60" step="5" value="30"><output id="oFps">30</output></div>
+  <div class="row"><label>Quality</label><input type="range" id="sQ" min="1" max="2" step="0.5" value="1"><output id="oQ">1x</output></div>
+  <div class="hint">A current you can't see, made visible by what drifts through it. Tuned as a live wallpaper &mdash; this panel fades when idle.</div>
+</div>
+<script>
+"use strict";
+(function () {
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const TAU = Math.PI * 2, BUCKETS = 16;
+
+  const PALETTES = [
+    { name: "aurora", bg: "#04060a", h0: 150, hr: 130, s: 70, l: 58 },
+    { name: "ocean",  bg: "#02060c", h0: 185, hr: 80,  s: 72, l: 56 },
+    { name: "nebula", bg: "#06040c", h0: 248, hr: 110, s: 72, l: 60 },
+    { name: "ember",  bg: "#0a0406", h0: 348, hr: 86,  s: 80, l: 57 },
+    { name: "gold",   bg: "#070605", h0: 36,  hr: 22,  s: 66, l: 60 },
+    { name: "sunset", bg: "#0a0510", h0: 268, hr: 132, s: 76, l: 58 },
+    { name: "mono",   bg: "#070709", h0: 214, hr: 16,  s: 10, l: 80 },
+    { name: "forest", bg: "#04080a", h0: 82,  hr: 84,  s: 60, l: 54 },
+    { name: "vapor",  bg: "#0a0414", h0: 188, hr: 142, s: 84, l: 62 }
+  ];
+  let pal = PALETTES[0];
+
+  let W = 0, H = 0, dpr = 1, qCap = 1, scale = 1;
+  let N = 1800, speed = 1.2, fade = 0.05, fpsCap = 30;
+  let paused = false, t = 0, drift = 0;
+  const STYLES = [
+    { name: "silk",   turns: 0.55, lw: 1.0, fade: 0.05,  dot: false, speed: 1.0 },
+    { name: "wisps",  turns: 1.10, lw: 1.1, fade: 0.10,  dot: false, speed: 1.0 },
+    { name: "marble", turns: 0.80, lw: 1.4, fade: 0.022, dot: false, speed: 0.8 },
+    { name: "dust",   turns: 0.70, lw: 1.0, fade: 0.09,  dot: true,  speed: 0.9 },
+    { name: "storm",  turns: 1.70, lw: 0.9, fade: 0.13,  dot: false, speed: 1.3 },
+    { name: "ribbons", turns: 0.50, lw: 3.4, fade: 0.05, dot: false, speed: 1.0, a: 0.26 },
+    { name: "constellation", turns: 0.35, lw: 1.0, fade: 0.85, dot: false, star: true, speed: 0.5, a: 1.0 }
+  ];
+  let turns = 0.55, lwMul = 1.0, dotMode = false, styleSpeed = 1.0, styleAlpha = 0.5, starMode = false;
+
+  let px, py, ox, oy, spd, life, bk;
+  const perm = new Uint8Array(512);
+  (function () { const p = []; for (let i = 0; i < 256; i++) p[i] = i; for (let i = 255; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const tmp = p[i]; p[i] = p[j]; p[j] = tmp; } for (let i = 0; i < 512; i++) perm[i] = p[i & 255]; })();
+  function fadeC(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a, b, t) { return a + t * (b - a); }
+  function grad(h, x, y, z) { h &= 15; const u = h < 8 ? x : y; const v = h < 4 ? y : (h === 12 || h === 14 ? x : z); return ((h & 1) ? -u : u) + ((h & 2) ? -v : v); }
+  function perlin(x, y, z) {
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
+    x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+    const u = fadeC(x), v = fadeC(y), w = fadeC(z);
+    const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z, B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
+    return lerp(lerp(lerp(grad(perm[AA], x, y, z), grad(perm[BA], x - 1, y, z), u), lerp(grad(perm[AB], x, y - 1, z), grad(perm[BB], x - 1, y - 1, z), u), v),
+                lerp(lerp(grad(perm[AA + 1], x, y, z - 1), grad(perm[BA + 1], x - 1, y, z - 1), u), lerp(grad(perm[AB + 1], x, y - 1, z - 1), grad(perm[BB + 1], x - 1, y - 1, z - 1), u), v), w);
+  }
+
+  function spawn(i) { px[i] = Math.random() * W; py[i] = Math.random() * H; ox[i] = px[i]; oy[i] = py[i]; spd[i] = speed * styleSpeed * scale * (0.6 + Math.random() * 0.8); life[i] = 60 + (Math.random() * 220) | 0; bk[i] = (Math.random() * BUCKETS) | 0; }
+  function seed() { px = new Float32Array(N); py = new Float32Array(N); ox = new Float32Array(N); oy = new Float32Array(N); spd = new Float32Array(N); life = new Int16Array(N); bk = new Int8Array(N); for (let i = 0; i < N; i++) spawn(i); }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, qCap);
+    const cssW = Math.max(window.innerWidth || 0, 320), cssH = Math.max(window.innerHeight || 0, 240);
+    W = Math.round(cssW * dpr); H = Math.round(cssH * dpr);
+    canvas.width = W; canvas.height = H; canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+    scale = Math.max(0.5, W / 1280);
+    ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, W, H);
+  }
+
+  function step() {
+    t += 1; drift += 0.03;
+    const FS = 3.5 / W, TS = 0.0009;
+    for (let i = 0; i < N; i++) {
+      ox[i] = px[i]; oy[i] = py[i];
+      const a = perlin(px[i] * FS, py[i] * FS, t * TS) * TAU * turns;
+      px[i] += Math.cos(a) * spd[i]; py[i] += Math.sin(a) * spd[i];
+      life[i]--;
+      if (life[i] <= 0 || px[i] < -5 || px[i] > W + 5 || py[i] < -5 || py[i] > H + 5) spawn(i);
+    }
+  }
+
+  function render() {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = pal.bg; ctx.globalAlpha = fade; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+    if (starMode) {
+      const cols = [];
+      for (let b = 0; b < BUCKETS; b++) { let hue = pal.h0 + drift + (b / BUCKETS) * pal.hr; hue = ((hue % 360) + 360) % 360; cols[b] = "hsl(" + hue.toFixed(0) + "," + pal.s + "%," + Math.min(92, pal.l + 20) + "%)"; }
+      for (let i = 0; i < N; i++) {
+        const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.06 + i * 1.7));
+        ctx.globalAlpha = styleAlpha * tw; ctx.fillStyle = cols[bk[i]];
+        const sr = (0.7 + 1.5 * tw) * scale;
+        ctx.beginPath(); ctx.arc(px[i], py[i], sr, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; return;
+    }
+    ctx.globalAlpha = styleAlpha;
+    ctx.lineWidth = Math.max(0.8, 1.15 * scale * lwMul); ctx.lineCap = "round";
+    const dr = Math.max(1.0, 1.35 * scale);
+    for (let b = 0; b < BUCKETS; b++) {
+      let hue = pal.h0 + drift + (b / BUCKETS) * pal.hr; hue = ((hue % 360) + 360) % 360;
+      const col = "hsl(" + hue.toFixed(0) + "," + pal.s + "%," + pal.l + "%)";
+      ctx.beginPath();
+      if (dotMode) {
+        ctx.fillStyle = col;
+        for (let i = 0; i < N; i++) { if (bk[i] !== b) continue; ctx.moveTo(px[i] + dr, py[i]); ctx.arc(px[i], py[i], dr, 0, TAU); }
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = col;
+        for (let i = 0; i < N; i++) { if (bk[i] !== b) continue; const dx = px[i] - ox[i], dy = py[i] - oy[i]; if (dx * dx + dy * dy > 400) continue; ctx.moveTo(ox[i], oy[i]); ctx.lineTo(px[i], py[i]); }
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+  }
+
+  let lastFrame = 0;
+  function loop(now) {
+    requestAnimationFrame(loop);
+    if (document.hidden) return;
+    const interval = 1000 / fpsCap;
+    if (now - lastFrame < interval - 1) return;
+    lastFrame = now;
+    if (!paused) step();
+    render();
+  }
+
+  const palsEl = document.getElementById("pals");
+  PALETTES.forEach((p, idx) => {
+    const d = document.createElement("div"); d.className = "pal" + (idx === 0 ? " sel" : "");
+    d.style.background = "hsl(" + (p.h0 + p.hr * 0.5) + "," + p.s + "%," + p.l + "%)";
+    d.title = p.name;
+    d.addEventListener("click", () => { pal = p; document.querySelectorAll(".pal").forEach(e => e.classList.remove("sel")); d.classList.add("sel"); ctx.fillStyle = pal.bg; ctx.fillRect(0, 0, W, H); });
+    palsEl.appendChild(d);
+  });
+  function bind(id, oid, fn, fmt) { const el = document.getElementById(id), o = document.getElementById(oid); el.addEventListener("input", () => { fn(parseFloat(el.value)); o.textContent = fmt ? fmt(el.value) : el.value; }); }
+  bind("sSpd", "oSpd", v => { speed = v; for (let i = 0; i < N; i++) spd[i] = speed * styleSpeed * scale * (0.6 + Math.random() * 0.8); }, x => (+x).toFixed(1));
+  bind("sN", "oN", v => { N = v | 0; seed(); });
+  bind("sTr", "oTr", v => fade = Math.max(0.012, (100 - v) / 100));
+  bind("sFps", "oFps", v => fpsCap = v | 0);
+  bind("sQ", "oQ", v => { qCap = v; resize(); }, x => (+x) + "x");
+
+  function applyStyle(s) { turns = s.turns; lwMul = s.lw; dotMode = s.dot; starMode = !!s.star; styleAlpha = s.a || 0.5; fade = s.fade; styleSpeed = s.speed; for (let i = 0; i < N; i++) spd[i] = speed * styleSpeed * scale * (0.6 + Math.random() * 0.8); const tr = Math.round(100 - fade * 100), trEl = document.getElementById("sTr"); if (trEl) { trEl.value = tr; document.getElementById("oTr").textContent = tr; } }
+  const styEl = document.getElementById("sStyle");
+  STYLES.forEach((s, i) => { const o = document.createElement("option"); o.value = i; o.textContent = s.name; styEl.appendChild(o); });
+  styEl.addEventListener("change", () => applyStyle(STYLES[styEl.value | 0]));
+
+  const panel = document.getElementById("panel");
+  let hideTimer = 0;
+  function poke() { panel.classList.remove("fade"); clearTimeout(hideTimer); hideTimer = setTimeout(() => panel.classList.add("fade"), 2800); }
+  window.addEventListener("pointermove", poke); poke();
+  document.addEventListener("keydown", e => { if (e.key === " ") { paused = !paused; e.preventDefault(); } else if (e.key === "n" || e.key === "N") { const i = (PALETTES.indexOf(pal) + 1) % PALETTES.length; document.querySelectorAll(".pal")[i].click(); } });
+  window.addEventListener("resize", resize);
+
+  resize(); seed();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Agar life — an eat-and-grow ecosystem</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0a13;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: #e8e8ee; -webkit-font-smoothing: antialiased; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+  #panel {
+    position: fixed; top: 16px; left: 16px; width: 248px; padding: 15px 17px 16px; border-radius: 16px;
+    background: rgba(14, 14, 22, 0.74); border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 10; transition: opacity .5s ease; }
+  #panel.fade { opacity: 0; pointer-events: none; }
+  #panel h1 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  #panel .sub { font-size: 11px; color: #9a9aa8; margin: 0 0 13px; line-height: 1.5; }
+  .row { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .row label { font-size: 11.5px; color: #b6b6c4; flex: 0 0 56px; }
+  .row output { font-size: 11.5px; color: #fff; flex: 0 0 32px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #fff; cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 15px; height: 15px; border: none; border-radius: 50%; background: #fff; cursor: pointer; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 4px 0 4px; }
+  button.act { font: inherit; font-size: 12px; color: #e8e8ee; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 9px; padding: 7px 6px; cursor: pointer; }
+  button.act:hover { background: rgba(255,255,255,0.13); }
+  .hint { font-size: 10px; color: #6f6f80; margin-top: 11px; line-height: 1.5; }
+  .stats { font-size: 10px; color: #6f6f80; margin-top: 9px; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>Agar life</h1>
+  <p class="sub">Cells eat food to grow, hunt anything smaller, and flee anything bigger. Nobody is in charge.</p>
+  <div class="row"><label>Food</label><input type="range" id="sFood" min="80" max="900" step="20" value="340"><output id="oFood">340</output></div>
+  <div class="row"><label>Cells</label><input type="range" id="sCells" min="10" max="160" step="2" value="60"><output id="oCells">60</output></div>
+  <div class="row"><label>Pace</label><input type="range" id="sSpd" min="0.4" max="2.2" step="0.1" value="1"><output id="oSpd">1.0</output></div>
+  <div class="row"><label>Max fps</label><input type="range" id="sFps" min="15" max="60" step="5" value="30"><output id="oFps">30</output></div>
+  <div class="row"><label>Quality</label><input type="range" id="sQ" min="1" max="2" step="0.5" value="1"><output id="oQ">1x</output></div>
+  <div class="btns"><button class="act" id="bReset">Reset</button><button class="act" id="bPause">Pause</button></div>
+  <div class="hint">Move your mouse to steer the white-ringed cell and eat your way up the food chain. Tuned for use as a live wallpaper &mdash; the panel hides itself when idle.</div>
+  <div class="stats"><span id="stFps">&mdash; fps</span><span id="stBig">&mdash;</span></div>
+</div>
+
+<script>
+"use strict";
+(function () {
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const TAU = Math.PI * 2;
+
+  let W = 0, H = 0, dpr = 1, qCap = 1, scale = 1;
+  let foodN = 340, cellN = 60, pace = 1, fpsCap = 30;
+  let paused = false;
+
+  const RADK = 3.0, FOOD_R = 2.6, FOOD_GAIN = 1.0, EAT_RATIO = 1.18;
+  const SPD = 3.6, FORCE = 0.10, MARGIN_REF = 64, TURN_REF = 0.5, MAXMASS = 220;
+
+  let fx, fy, fhue, fcolN = 0;          // food
+  let cx, cy, cvx, cvy, cmass, chue, ccolN = 0, wander; // cells
+  let foodCell = 1, fcols = 0, frows = 0, fgridSize = -1, fhead = null, fnext = new Int32Array(foodN);
+  let mouseX = 0, mouseY = 0, mouseActive = false;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function radOf(m) { return Math.sqrt(m) * RADK * scale; }
+
+  function seedFood() {
+    fx = new Float32Array(foodN); fy = new Float32Array(foodN); fhue = new Float32Array(foodN); fnext = new Int32Array(foodN);
+    for (let i = 0; i < foodN; i++) { fx[i] = rnd(0, W); fy[i] = rnd(0, H); fhue[i] = rnd(0, 360); }
+    fcolN = foodN;
+  }
+  function seedCells() {
+    cx = new Float32Array(cellN); cy = new Float32Array(cellN); cvx = new Float32Array(cellN); cvy = new Float32Array(cellN);
+    cmass = new Float32Array(cellN); chue = new Float32Array(cellN); wander = new Float32Array(cellN);
+    for (let i = 0; i < cellN; i++) { cx[i] = rnd(0, W); cy[i] = rnd(0, H); cmass[i] = rnd(4, 18); chue[i] = rnd(0, 360); wander[i] = rnd(0, TAU); cvx[i] = 0; cvy[i] = 0; }
+    ccolN = cellN;
+  }
+  function respawnCell(i) { cx[i] = rnd(0, W); cy[i] = rnd(0, H); cmass[i] = rnd(4, 9); chue[i] = rnd(0, 360); cvx[i] = 0; cvy[i] = 0; wander[i] = rnd(0, TAU); }
+  function respawnFood(i) { fx[i] = rnd(0, W); fy[i] = rnd(0, H); fhue[i] = rnd(0, 360); }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, qCap);
+    const cssW = Math.max(window.innerWidth || 0, 320), cssH = Math.max(window.innerHeight || 0, 240);
+    const ow = W, oh = H;
+    W = Math.round(cssW * dpr); H = Math.round(cssH * dpr);
+    canvas.width = W; canvas.height = H; canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+    scale = Math.max(0.5, W / 1280);
+    if (cx && ow > 0 && oh > 0) {
+      const sx = W / ow, sy = H / oh;
+      for (let i = 0; i < cellN; i++) { cx[i] *= sx; cy[i] *= sy; }
+      for (let i = 0; i < foodN; i++) { fx[i] *= sx; fy[i] *= sy; }
+    }
+    ctx.fillStyle = "#0a0a13"; ctx.fillRect(0, 0, W, H);
+  }
+
+  function ensureFoodGrid() {
+    foodCell = Math.max(1, 150 * scale);
+    fcols = Math.max(1, Math.floor(W / foodCell)); frows = Math.max(1, Math.floor(H / foodCell));
+    const size = fcols * frows;
+    if (size !== fgridSize) { fhead = new Int32Array(size); fgridSize = size; }
+  }
+  function buildFoodGrid() {
+    fhead.fill(-1);
+    for (let i = 0; i < foodN; i++) {
+      let gx = Math.floor(fx[i] / foodCell); if (gx < 0) gx = 0; else if (gx >= fcols) gx = fcols - 1;
+      let gy = Math.floor(fy[i] / foodCell); if (gy < 0) gy = 0; else if (gy >= frows) gy = frows - 1;
+      const c = gy * fcols + gx; fnext[i] = fhead[c]; fhead[c] = i;
+    }
+  }
+  function limit(a, b, m) { const m2 = a * a + b * b; if (m2 > m * m) { const k = m / Math.sqrt(m2); return [a * k, b * k]; } return [a, b]; }
+
+  function step() {
+    const maxF = FORCE * scale, margin = MARGIN_REF * scale, turn = TURN_REF * scale;
+    ensureFoodGrid(); buildFoodGrid();
+
+    for (let i = 0; i < cellN; i++) {
+      const xi = cx[i], yi = cy[i], mi = cmass[i], ri = radOf(mi);
+      const maxSpd = SPD * scale * pace * Math.pow(mi, -0.30);
+      const vision = ri * 5 + 110 * scale, vision2 = vision * vision;
+      const foodVision = ri * 4 + 150 * scale;
+
+      let thX = 0, thY = 0, thFound = false, thBest = 0;
+      let prX = 0, prY = 0, prFound = false, prBest = Infinity;
+      for (let j = 0; j < cellN; j++) {
+        if (j === i) continue;
+        const dx = cx[j] - xi, dy = cy[j] - yi, d2 = dx * dx + dy * dy;
+        if (d2 > vision2) continue;
+        if (cmass[j] > mi * EAT_RATIO) { if (cmass[j] > thBest) { thBest = cmass[j]; thX = dx; thY = dy; thFound = true; } }
+        else if (mi > cmass[j] * EAT_RATIO) { if (d2 < prBest) { prBest = d2; prX = dx; prY = dy; prFound = true; } }
+      }
+
+      let fdX = 0, fdY = 0, fdFound = false, fdBest = foodVision * foodVision;
+      let gx = Math.floor(xi / foodCell); if (gx < 0) gx = 0; else if (gx >= fcols) gx = fcols - 1;
+      let gy = Math.floor(yi / foodCell); if (gy < 0) gy = 0; else if (gy >= frows) gy = frows - 1;
+      const gx0 = gx > 0 ? gx - 1 : 0, gx1 = gx < fcols - 1 ? gx + 1 : fcols - 1;
+      const gy0 = gy > 0 ? gy - 1 : 0, gy1 = gy < frows - 1 ? gy + 1 : frows - 1;
+      for (let cyy = gy0; cyy <= gy1; cyy++) { const base = cyy * fcols; for (let cxx = gx0; cxx <= gx1; cxx++) { for (let k = fhead[base + cxx]; k >= 0; k = fnext[k]) { const dx = fx[k] - xi, dy = fy[k] - yi, d2 = dx * dx + dy * dy; if (d2 < fdBest) { fdBest = d2; fdX = dx; fdY = dy; fdFound = true; } } } }
+
+      let dvx = Math.cos(wander[i]), dvy = Math.sin(wander[i]);
+      wander[i] += rnd(-0.25, 0.25);
+      if (fdFound) { const m = Math.sqrt(fdX * fdX + fdY * fdY) || 1; dvx = fdX / m; dvy = fdY / m; }
+      if (prFound) { const m = Math.sqrt(prX * prX + prY * prY) || 1; dvx = prX / m; dvy = prY / m; }
+      if (thFound) { const m = Math.sqrt(thX * thX + thY * thY) || 1; dvx = -thX / m; dvy = -thY / m; }
+      if (mouseActive && i === 0) { const dx = mouseX - xi, dy = mouseY - yi, m = Math.sqrt(dx * dx + dy * dy) || 1; dvx = dx / m; dvy = dy / m; }
+
+      let s = limit(dvx * maxSpd - cvx[i], dvy * maxSpd - cvy[i], maxF);
+      let nvx = cvx[i] + s[0], nvy = cvy[i] + s[1];
+      if (xi < margin) nvx += turn; else if (xi > W - margin) nvx -= turn;
+      if (yi < margin) nvy += turn; else if (yi > H - margin) nvy -= turn;
+      const sp2 = nvx * nvx + nvy * nvy;
+      if (sp2 > maxSpd * maxSpd) { const m = maxSpd / Math.sqrt(sp2); nvx *= m; nvy *= m; }
+      cvx[i] = nvx; cvy[i] = nvy;
+    }
+
+    for (let i = 0; i < cellN; i++) {
+      let px = cx[i] + cvx[i], py = cy[i] + cvy[i];
+      if (px < 0) px = 0; else if (px > W) px = W;
+      if (py < 0) py = 0; else if (py > H) py = H;
+      cx[i] = px; cy[i] = py;
+      if (cmass[i] > 9) cmass[i] *= 0.9994;
+      if (cmass[i] > MAXMASS) cmass[i] = MAXMASS;
+    }
+
+    // eat food
+    for (let i = 0; i < cellN; i++) {
+      const xi = cx[i], yi = cy[i], ri = radOf(cmass[i]), ri2 = ri * ri;
+      let gx = Math.floor(xi / foodCell); if (gx < 0) gx = 0; else if (gx >= fcols) gx = fcols - 1;
+      let gy = Math.floor(yi / foodCell); if (gy < 0) gy = 0; else if (gy >= frows) gy = frows - 1;
+      const gx0 = gx > 0 ? gx - 1 : 0, gx1 = gx < fcols - 1 ? gx + 1 : fcols - 1;
+      const gy0 = gy > 0 ? gy - 1 : 0, gy1 = gy < frows - 1 ? gy + 1 : frows - 1;
+      for (let cyy = gy0; cyy <= gy1; cyy++) { const base = cyy * fcols; for (let cxx = gx0; cxx <= gx1; cxx++) { for (let k = fhead[base + cxx]; k >= 0; k = fnext[k]) { const dx = fx[k] - xi, dy = fy[k] - yi; if (dx * dx + dy * dy < ri2) { cmass[i] += FOOD_GAIN; respawnFood(k); } } } }
+    }
+    // eat cells
+    for (let i = 0; i < cellN; i++) {
+      for (let j = 0; j < cellN; j++) {
+        if (j === i) continue;
+        if (cmass[i] > cmass[j] * EAT_RATIO) {
+          const dx = cx[j] - cx[i], dy = cy[j] - cy[i], ri = radOf(cmass[i]);
+          if (dx * dx + dy * dy < ri * ri) { cmass[i] += cmass[j] * 0.85; respawnCell(j); }
+        }
+      }
+    }
+  }
+
+  function render() {
+    ctx.fillStyle = "#0a0a13"; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < foodN; i++) { ctx.fillStyle = "hsl(" + (fhue[i] | 0) + ",80%,62%)"; ctx.beginPath(); ctx.arc(fx[i], fy[i], FOOD_R * scale, 0, TAU); ctx.fill(); }
+    ctx.lineWidth = Math.max(1, 2 * scale);
+    for (let i = 0; i < cellN; i++) {
+      const r = radOf(cmass[i]), h = chue[i] | 0;
+      ctx.fillStyle = "hsl(" + h + ",66%,57%)"; ctx.beginPath(); ctx.arc(cx[i], cy[i], r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "hsl(" + h + ",70%,38%)"; ctx.stroke();
+      if (mouseActive && i === 0) { ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = Math.max(1.5, 2.5 * scale); ctx.beginPath(); ctx.arc(cx[i], cy[i], r + 2 * scale, 0, TAU); ctx.stroke(); ctx.lineWidth = Math.max(1, 2 * scale); }
+    }
+  }
+
+  let lastFps = performance.now(), frames = 0, lastFrame = 0;
+  function loop(now) {
+    requestAnimationFrame(loop);
+    if (document.hidden) return;
+    const interval = 1000 / fpsCap;
+    if (now - lastFrame < interval - 1) return;
+    lastFrame = now;
+    if (!paused) step();
+    render();
+    frames++;
+    if (now - lastFps >= 600) {
+      document.getElementById("stFps").textContent = Math.round(frames * 1000 / (now - lastFps)) + " fps";
+      let mx = 0; for (let i = 0; i < cellN; i++) if (cmass[i] > mx) mx = cmass[i];
+      document.getElementById("stBig").textContent = "biggest " + Math.round(mx);
+      frames = 0; lastFps = now;
+    }
+  }
+
+  canvas.addEventListener("pointermove", e => { const r = canvas.getBoundingClientRect(), k = W / r.width; mouseX = (e.clientX - r.left) * k; mouseY = (e.clientY - r.top) * k; mouseActive = true; });
+  canvas.addEventListener("pointerleave", () => { mouseActive = false; });
+
+  const panel = document.getElementById("panel");
+  let hideTimer = 0;
+  function pokePanel() { panel.classList.remove("fade"); clearTimeout(hideTimer); hideTimer = setTimeout(() => panel.classList.add("fade"), 2600); }
+  window.addEventListener("pointermove", pokePanel); pokePanel();
+
+  function bind(id, oid, fn, fmt) { const el = document.getElementById(id), o = document.getElementById(oid); el.addEventListener("input", () => { fn(parseFloat(el.value)); o.textContent = fmt ? fmt(el.value) : el.value; }); }
+  bind("sFood", "oFood", v => { foodN = v | 0; seedFood(); fgridSize = -1; });
+  bind("sCells", "oCells", v => { cellN = v | 0; seedCells(); });
+  bind("sSpd", "oSpd", v => pace = v, x => (+x).toFixed(1));
+  bind("sFps", "oFps", v => fpsCap = v | 0);
+  bind("sQ", "oQ", v => { qCap = v; resize(); }, x => (+x) + "x");
+  document.getElementById("bReset").addEventListener("click", () => { seedFood(); seedCells(); fgridSize = -1; });
+  const pauseBtn = document.getElementById("bPause");
+  pauseBtn.addEventListener("click", () => { paused = !paused; pauseBtn.textContent = paused ? "Play" : "Pause"; });
+  document.addEventListener("keydown", e => { if (e.key === " ") { paused = !paused; pauseBtn.textContent = paused ? "Play" : "Pause"; e.preventDefault(); } });
+  window.addEventListener("resize", resize);
+
+  resize(); seedFood(); seedCells();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

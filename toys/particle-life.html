@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Particle Life</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07070b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: #e8e8ee; -webkit-font-smoothing: antialiased; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+  #panel {
+    position: fixed; top: 16px; left: 16px; width: 280px; max-height: calc(100% - 32px);
+    overflow-y: auto; padding: 16px 18px 18px; border-radius: 16px;
+    background: rgba(16, 16, 22, 0.72); border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 10; transition: transform .3s ease, opacity .3s ease;
+  }
+  #panel.hidden { transform: translateX(-110%); opacity: 0; pointer-events: none; }
+  #panel h1 { font-size: 15px; font-weight: 600; margin: 0 0 2px; letter-spacing: .2px; }
+  #panel .sub { font-size: 11.5px; color: #9a9aa8; margin: 0 0 14px; line-height: 1.5; }
+
+  .row { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+  .row label { font-size: 11.5px; color: #b6b6c4; flex: 0 0 58px; }
+  .row output { font-size: 11.5px; color: #fff; flex: 0 0 40px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 4px;
+    background: rgba(255,255,255,0.14); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%;
+    background: #fff; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  input[type=range]::-moz-range-thumb { width: 15px; height: 15px; border: none; border-radius: 50%; background: #fff; cursor: pointer; }
+
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 4px 0 14px; }
+  button.act { font: inherit; font-size: 12px; color: #e8e8ee; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 9px; padding: 8px 6px; cursor: pointer;
+    transition: background .15s, transform .05s; }
+  button.act:hover { background: rgba(255,255,255,0.13); }
+  button.act:active { transform: scale(0.97); }
+  button.act.wide { grid-column: 1 / -1; }
+  button.act.primary { background: rgba(120,110,255,0.22); border-color: rgba(140,130,255,0.4); }
+  button.act.primary:hover { background: rgba(120,110,255,0.34); }
+
+  .mtxwrap { margin-top: 4px; }
+  .mtxlabel { font-size: 11.5px; color: #b6b6c4; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .mtxlabel span { color: #76768a; }
+  #matrix { display: grid; gap: 3px; user-select: none; touch-action: none; }
+  .cell { aspect-ratio: 1; border-radius: 5px; cursor: ns-resize; position: relative;
+    background: #1a1a24; transition: box-shadow .1s; }
+  .cell:hover { box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.5); }
+  .hdr { border-radius: 50%; align-self: center; justify-self: center; }
+  .hint { font-size: 10.5px; color: #6f6f80; margin-top: 10px; line-height: 1.5; }
+  .stats { font-size: 10.5px; color: #6f6f80; margin-top: 12px; display: flex; justify-content: space-between;
+    font-variant-numeric: tabular-nums; }
+
+  #toggle { position: fixed; top: 16px; left: 16px; z-index: 11; width: 38px; height: 38px; border-radius: 10px;
+    background: rgba(16,16,22,0.72); border: 1px solid rgba(255,255,255,0.12); color: #e8e8ee; cursor: pointer;
+    font-size: 17px; display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+  #panel.hidden ~ #toggle { display: flex; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>Particle life</h1>
+  <p class="sub">Each colour attracts or repels every other by a secret rule matrix. Life is what emerges.</p>
+
+  <div class="btns">
+    <button class="act primary wide" id="bRand">Randomize world</button>
+    <button class="act" id="bMut">Mutate</button>
+    <button class="act" id="bReset">Re-seed</button>
+    <button class="act wide" id="bPause">Pause</button>
+  </div>
+
+  <div class="row"><label>Species</label><input type="range" id="sK" min="2" max="7" step="1" value="6"><output id="oK">6</output></div>
+  <div class="row"><label>Particles</label><input type="range" id="sN" min="200" max="4000" step="100" value="2000"><output id="oN">2000</output></div>
+  <div class="row"><label>Force</label><input type="range" id="sF" min="0.5" max="16" step="0.5" value="8"><output id="oF">8</output></div>
+  <div class="row"><label>Range</label><input type="range" id="sR" min="0.04" max="0.12" step="0.005" value="0.075"><output id="oR">.075</output></div>
+  <div class="row"><label>Friction</label><input type="range" id="sD" min="10" max="180" step="5" value="45"><output id="oD">45</output></div>
+  <div class="row"><label>Trails</label><input type="range" id="sT" min="0" max="95" step="1" value="80"><output id="oT">80</output></div>
+
+  <div class="mtxwrap">
+    <div class="mtxlabel">Rule matrix <span>row feels column</span></div>
+    <div id="matrix"></div>
+    <div class="hint">Drag a cell up to attract, down to repel. Green = chase, red = flee. Move your mouse over the canvas to stir.</div>
+  </div>
+  <div class="stats"><span id="stFps">— fps</span><span id="stN">—</span></div>
+</div>
+<button id="toggle" title="Show controls">&#9776;</button>
+
+<script>
+"use strict";
+(function () {
+  const COLORS = ["#ff5470", "#ffd166", "#06d6a0", "#4dd0ff", "#b388ff", "#ff8c42", "#f15bb5"];
+  const TAU = Math.PI * 2;
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let W = 0, H = 0, aspect = 1, dpr = 1, radiusPx = 2;
+
+  // simulation parameters
+  let K = 6, n = 2000;
+  let rMax = 0.075, forceFactor = 8, frictionHalfLife = 0.045, dt = 0.016;
+  let fade = 0.2, frictionFactor = 0.5;
+  let paused = false;
+
+  // particle state
+  let posX, posY, velX, velY, species;
+  // interaction matrix, K*K, A[i*K+j] = force on species i from species j
+  let A = new Float32Array(K * K);
+
+  // spatial grid (linked-list)
+  let cols = 0, rows = 0, gridSize = -1, head = null, nextArr = new Int32Array(n);
+
+  // mouse
+  let mouseX = 0, mouseY = 0, mouseActive = false, mouseDown = false;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  function recomputeFriction() { frictionFactor = Math.pow(0.5, dt / frictionHalfLife); }
+
+  function randomizeMatrix() {
+    A = new Float32Array(K * K);
+    for (let i = 0; i < K * K; i++) A[i] = rand(-1, 1);
+    buildMatrixUI();
+  }
+  function mutateMatrix() {
+    for (let i = 0; i < K * K; i++) {
+      A[i] = clamp(A[i] + (Math.random() + Math.random() + Math.random() - 1.5) * 0.5, -1, 1);
+    }
+    paintMatrixUI();
+  }
+
+  function seedParticles() {
+    posX = new Float32Array(n); posY = new Float32Array(n);
+    velX = new Float32Array(n); velY = new Float32Array(n);
+    species = new Int8Array(n);
+    nextArr = new Int32Array(n);
+    for (let i = 0; i < n; i++) {
+      posX[i] = Math.random();
+      posY[i] = Math.random() * aspect;
+      velX[i] = 0; velY[i] = 0;
+      species[i] = (Math.random() * K) | 0;
+    }
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = Math.max(window.innerWidth || 0, 320), cssH = Math.max(window.innerHeight || 0, 240);
+    const oldAspect = aspect;
+    W = Math.round(cssW * dpr); H = Math.round(cssH * dpr);
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = cssW + "px"; canvas.style.height = cssH + "px";
+    aspect = (W > 0 && H > 0) ? H / W : 0.6;
+    radiusPx = Math.max(1.4, (W / 720) * 1.7);
+    if (posY && oldAspect > 0 && aspect !== oldAspect) {
+      const s = aspect / oldAspect;
+      for (let i = 0; i < n; i++) posY[i] *= s;
+    }
+    ctx.fillStyle = "#07070b"; ctx.fillRect(0, 0, W, H);
+  }
+
+  function ensureGrid() {
+    cols = Math.max(1, Math.floor(1 / rMax));
+    rows = Math.max(1, Math.floor(aspect / rMax));
+    const size = cols * rows;
+    if (size !== gridSize) { head = new Int32Array(size); gridSize = size; }
+  }
+
+  function forceFn(r, a) {
+    const beta = 0.3;
+    if (r < beta) return r / beta - 1;
+    if (r < 1) return a * (1 - Math.abs(2 * r - 1 - beta) / (1 - beta));
+    return 0;
+  }
+
+  function step() {
+    ensureGrid();
+    head.fill(-1);
+    for (let i = 0; i < n; i++) {
+      let cx = Math.floor(posX[i] * cols); if (cx < 0) cx = 0; else if (cx >= cols) cx = cols - 1;
+      let cy = Math.floor((posY[i] / aspect) * rows); if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+      const c = cy * cols + cx;
+      nextArr[i] = head[c]; head[c] = i;
+    }
+    const r2 = rMax * rMax, halfH = aspect * 0.5;
+    const nxList = [0, 0, 0], nyList = [0, 0, 0];
+
+    for (let i = 0; i < n; i++) {
+      const xi = posX[i], yi = posY[i], si = species[i] * K;
+      let cx = Math.floor(xi * cols); if (cx < 0) cx = 0; else if (cx >= cols) cx = cols - 1;
+      let cy = Math.floor((yi / aspect) * rows); if (cy < 0) cy = 0; else if (cy >= rows) cy = rows - 1;
+
+      let ncx, ncy;
+      if (cols >= 3) { nxList[0] = (cx - 1 + cols) % cols; nxList[1] = cx; nxList[2] = (cx + 1) % cols; ncx = 3; }
+      else { for (let k = 0; k < cols; k++) nxList[k] = k; ncx = cols; }
+      if (rows >= 3) { nyList[0] = (cy - 1 + rows) % rows; nyList[1] = cy; nyList[2] = (cy + 1) % rows; ncy = 3; }
+      else { for (let k = 0; k < rows; k++) nyList[k] = k; ncy = rows; }
+
+      let fx = 0, fy = 0;
+      for (let yy = 0; yy < ncy; yy++) {
+        const base = nyList[yy] * cols;
+        for (let xx = 0; xx < ncx; xx++) {
+          for (let j = head[base + nxList[xx]]; j >= 0; j = nextArr[j]) {
+            if (j === i) continue;
+            let dx = posX[j] - xi, dy = posY[j] - yi;
+            if (dx > 0.5) dx -= 1; else if (dx < -0.5) dx += 1;
+            if (dy > halfH) dy -= aspect; else if (dy < -halfH) dy += aspect;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= r2 || d2 === 0) continue;
+            const d = Math.sqrt(d2);
+            const f = forceFn(d / rMax, A[si + species[j]]);
+            fx += (dx / d) * f; fy += (dy / d) * f;
+          }
+        }
+      }
+
+      if (mouseActive) {
+        let dx = xi - mouseX, dy = yi - mouseY;
+        if (dx > 0.5) dx -= 1; else if (dx < -0.5) dx += 1;
+        if (dy > halfH) dy -= aspect; else if (dy < -halfH) dy += aspect;
+        const mr = 0.13, d2 = dx * dx + dy * dy;
+        if (d2 < mr * mr && d2 > 1e-9) {
+          const d = Math.sqrt(d2), push = (1 - d / mr) * (mouseDown ? 9 : 3.5) / (rMax * forceFactor);
+          fx += (dx / d) * push; fy += (dy / d) * push;
+        }
+      }
+
+      fx *= rMax * forceFactor; fy *= rMax * forceFactor;
+      velX[i] = velX[i] * frictionFactor + fx * dt;
+      velY[i] = velY[i] * frictionFactor + fy * dt;
+    }
+
+    for (let i = 0; i < n; i++) {
+      let x = posX[i] + velX[i] * dt, y = posY[i] + velY[i] * dt;
+      if (x < 0) x += 1; else if (x >= 1) x -= 1;
+      if (y < 0) y += aspect; else if (y >= aspect) y -= aspect;
+      posX[i] = x; posY[i] = y;
+    }
+  }
+
+  function render() {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(7,7,11," + fade + ")";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+    const r = radiusPx;
+    for (let s = 0; s < K; s++) {
+      ctx.fillStyle = COLORS[s];
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (species[i] !== s) continue;
+        const x = posX[i] * W, y = posY[i] * W;
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, TAU);
+      }
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  let lastFps = performance.now(), frames = 0;
+  function loop() {
+    if (!paused) step();
+    render();
+    frames++;
+    const now = performance.now();
+    if (now - lastFps >= 500) {
+      document.getElementById("stFps").textContent = Math.round(frames * 1000 / (now - lastFps)) + " fps";
+      frames = 0; lastFps = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- matrix UI ----------
+  const matrixEl = document.getElementById("matrix");
+  function valColor(v) {
+    if (v >= 0) { const a = 0.12 + v * 0.78; return "rgba(6,214,160," + a.toFixed(3) + ")"; }
+    const a = 0.12 + (-v) * 0.78; return "rgba(255,84,112," + a.toFixed(3) + ")";
+  }
+  function buildMatrixUI() {
+    matrixEl.style.gridTemplateColumns = "14px repeat(" + K + ", 1fr)";
+    matrixEl.innerHTML = "";
+    matrixEl.appendChild(document.createElement("div"));
+    for (let j = 0; j < K; j++) {
+      const d = document.createElement("div");
+      d.className = "hdr"; d.style.background = COLORS[j]; d.style.width = "12px"; d.style.height = "12px";
+      matrixEl.appendChild(d);
+    }
+    for (let i = 0; i < K; i++) {
+      const rowHdr = document.createElement("div");
+      rowHdr.className = "hdr"; rowHdr.style.background = COLORS[i]; rowHdr.style.width = "12px"; rowHdr.style.height = "12px";
+      matrixEl.appendChild(rowHdr);
+      for (let j = 0; j < K; j++) {
+        const cell = document.createElement("div");
+        cell.className = "cell"; cell.dataset.i = i; cell.dataset.j = j;
+        cell.style.background = valColor(A[i * K + j]);
+        cell.title = "row " + (i + 1) + " feels col " + (j + 1) + ": " + A[i * K + j].toFixed(2);
+        matrixEl.appendChild(cell);
+      }
+    }
+  }
+  function paintMatrixUI() {
+    matrixEl.querySelectorAll(".cell").forEach(cell => {
+      const idx = (+cell.dataset.i) * K + (+cell.dataset.j);
+      cell.style.background = valColor(A[idx]);
+      cell.title = "row " + (+cell.dataset.i + 1) + " feels col " + (+cell.dataset.j + 1) + ": " + A[idx].toFixed(2);
+    });
+  }
+
+  let dragCell = null, dragStartY = 0, dragStartVal = 0;
+  matrixEl.addEventListener("pointerdown", e => {
+    const cell = e.target.closest(".cell");
+    if (!cell) return;
+    dragCell = cell; dragStartY = e.clientY;
+    dragStartVal = A[(+cell.dataset.i) * K + (+cell.dataset.j)];
+    matrixEl.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  matrixEl.addEventListener("pointermove", e => {
+    if (!dragCell) return;
+    const idx = (+dragCell.dataset.i) * K + (+dragCell.dataset.j);
+    A[idx] = clamp(dragStartVal - (e.clientY - dragStartY) * 0.011, -1, 1);
+    dragCell.style.background = valColor(A[idx]);
+    dragCell.title = "row " + (+dragCell.dataset.i + 1) + " feels col " + (+dragCell.dataset.j + 1) + ": " + A[idx].toFixed(2);
+  });
+  function endDrag() { dragCell = null; }
+  matrixEl.addEventListener("pointerup", endDrag);
+  matrixEl.addEventListener("pointercancel", endDrag);
+
+  // ---------- mouse on canvas ----------
+  canvas.addEventListener("pointermove", e => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = (e.clientX - rect.left) / rect.width;
+    mouseY = (e.clientY - rect.top) / rect.width;
+    mouseActive = true;
+  });
+  canvas.addEventListener("pointerdown", e => { mouseDown = true; mouseActive = true; });
+  window.addEventListener("pointerup", () => { mouseDown = false; });
+  canvas.addEventListener("pointerleave", () => { mouseActive = false; mouseDown = false; });
+
+  // ---------- controls ----------
+  function bindSlider(id, outId, fn, fmt) {
+    const el = document.getElementById(id), out = document.getElementById(outId);
+    el.addEventListener("input", () => { fn(parseFloat(el.value)); out.textContent = fmt ? fmt(el.value) : el.value; });
+  }
+  bindSlider("sK", "oK", v => { K = v | 0; A = new Float32Array(K * K); for (let i = 0; i < K * K; i++) A[i] = rand(-1, 1); for (let i = 0; i < n; i++) species[i] = (Math.random() * K) | 0; buildMatrixUI(); });
+  bindSlider("sN", "oN", v => { n = v | 0; seedParticles(); document.getElementById("stN").textContent = n + " particles"; });
+  bindSlider("sF", "oF", v => { forceFactor = v; });
+  bindSlider("sR", "oR", v => { rMax = v; gridSize = -1; }, x => "." + Math.round(parseFloat(x) * 1000));
+  bindSlider("sD", "oD", v => { frictionHalfLife = v / 1000; recomputeFriction(); });
+  bindSlider("sT", "oT", v => { fade = clamp(1 - v / 100, 0.03, 1); });
+
+  document.getElementById("bRand").addEventListener("click", randomizeMatrix);
+  document.getElementById("bMut").addEventListener("click", mutateMatrix);
+  document.getElementById("bReset").addEventListener("click", seedParticles);
+  const pauseBtn = document.getElementById("bPause");
+  pauseBtn.addEventListener("click", () => { paused = !paused; pauseBtn.textContent = paused ? "Play" : "Pause"; });
+
+  const panel = document.getElementById("panel"), toggle = document.getElementById("toggle");
+  toggle.addEventListener("click", () => panel.classList.remove("hidden"));
+  document.addEventListener("keydown", e => {
+    if (e.key === " ") { paused = !paused; pauseBtn.textContent = paused ? "Play" : "Pause"; e.preventDefault(); }
+    else if (e.key === "r" || e.key === "R") randomizeMatrix();
+    else if (e.key === "h" || e.key === "H") panel.classList.toggle("hidden");
+  });
+  window.addEventListener("resize", resize);
+
+  // ---------- boot ----------
+  resize();
+  recomputeFriction();
+  randomizeMatrix();
+  seedParticles();
+  document.getElementById("stN").textContent = n + " particles";
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

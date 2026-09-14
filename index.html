@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>William Wang</title>
+  <meta name="description" content="William Wang: MD student, AI + emotion researcher, builder. Projects, companies, ideas, research, events, and ways to join in.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="William Wang">
+  <meta property="og:description" content="MD student, AI + emotion researcher, builder. Projects, companies, ideas, research, events, and ways to join in.">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#f2eee4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f2eee4'/%3E%3Cpath d='M4 36h14l5-14 8 28 6-20 4 6h19' fill='none' stroke='%23e0442c' stroke-width='5' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="field">
+  <a class="skip" href="#main">skip to content</a>
+
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="back to top">w<span>/</span>w</a>
+    <nav class="nav" id="nav" aria-label="sections"></nav>
+    <div class="view-toggle" role="group" aria-label="view">
+      <button type="button" data-view="field" aria-pressed="true">field</button>
+      <button type="button" data-view="index" aria-pressed="false">index</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-label="intro"></section>
+
+    <figure class="field" id="field">
+      <canvas class="field-dust" aria-hidden="true"></canvas>
+      <canvas class="field-nodes" aria-hidden="true"></canvas>
+      <figcaption class="field-cap">
+        <span class="field-fig">fig. 1</span>
+        <span id="field-caption">everything i'm working on. hover a dot, click to open.</span>
+      </figcaption>
+      <div class="field-legend" id="field-legend" role="group" aria-label="filter the field"></div>
+    </figure>
+
+    <div id="sections"></div>
+  </main>
+
+  <footer class="foot" id="foot"></footer>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <button type="button" class="drawer-close" id="drawer-close">close <span aria-hidden="true">✕</span></button>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <noscript><p class="noscript">this site renders from content.js, so it needs javascript.</p></noscript>
+
+  <script src="content.js"></script>
+  <script src="field.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
