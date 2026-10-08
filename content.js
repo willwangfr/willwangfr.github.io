@@ -9,15 +9,16 @@
 //   embed 'toys/x.html' (live preview inside the detail panel)
 // prose fields accept [text](https://link) for inline links.
 window.SITE = {
-  updated: "sep 12, 2026",
+  updated: "oct 8, 2026",
 
   person: {
     first: "william",
     last: "wang",
     email: "wwang719@usc.edu",
-    bio: "i'm an MD student at USC Keck. my research uses language models to study emotion + psychiatry, with the Adolphs lab at Caltech. i'm also CSO at Cosmora, and i build a lot of stuff on the side.",
+    bio: "i'm an MD student at USC Keck. my research uses language models to study emotion + psychiatry, with the Adolphs lab at Caltech. i'm clinical AI lead at Coherence Health and CSO at Cosmora, and i build a lot of stuff on the side.",
     roles: [
       { text: "md student · usc keck", kind: "research" },
+      { text: "clinical ai lead · coherence health", kind: "company" },
       { text: "ai + emotion research · caltech", kind: "research" },
       { text: "cso · cosmora", kind: "company" },
       { text: "builder", kind: "build" },
@@ -43,6 +44,7 @@ window.SITE = {
   },
 
   now: [
+    "building the product at [Coherence Health](https://coherencehealth.io): an AI functional-medicine doctor, starting with autoimmune conditions like hashimoto's",
     "getting papers out on emotion + psychiatry in language models, with the [Adolphs lab](https://emotion.caltech.edu/) at Caltech",
     "helping pre-meds get into med school with [t20 consulting](https://t20consulting.com/)",
     "working on [Cosmora](https://www.cosmorahealth.com/): a model that reads retinal photos, plus a cheap handheld camera to take them",
@@ -228,6 +230,17 @@ window.SITE = {
 
     // ---------- companies ----------
     {
+      id: "coherence-health", kind: "company", featured: true,
+      title: "coherence health", role: "clinical ai lead", year: "2026–", status: "active",
+      oneLiner: "an AI functional-medicine doctor, starting with autoimmune conditions like hashimoto's. i'm building the product: turning the hour-long NP intake into a five-minute async review, then automating follow-ups, meds and labs.",
+      details: [
+        "backed by a16z speedrun. first patients started late september 2026, and we're kicking off the raise now.",
+      ],
+      links: [
+        { label: "coherencehealth.io", url: "https://coherencehealth.io" },
+      ],
+    },
+    {
       id: "cosmora", kind: "company",
       title: "cosmora", role: "cso", year: "2026–", status: "research stage",
       oneLiner: "retinal AI. software that reads one photo of the back of the eye for disease risk, plus a low-cost handheld camera to take that photo.",
@@ -250,9 +263,9 @@ window.SITE = {
       oneLiner: "AI research on personality in language models. we're working on models where the experts in a mixture-of-experts are psychological archetypes, and we keep a catalog of the tells that make AI writing read as slop.",
       details: ["with [Cody Hergenroeder](https://codyh.xyz) and Piyush Jha. it sits right next to my research on emotion in language models and on AI-text detectors."],
       links: [
-        { label: "omegapoint.space", url: "https://omegapoint.space/" },
-        { label: "manifesto", url: "https://omegapoint.space/manifesto.html" },
-        { label: "the slop catalog", url: "https://omegapoint.space/slop.html" },
+        { label: "sloplabs.tech", url: "https://sloplabs.tech" },
+        { label: "manifesto", url: "https://sloplabs.tech/path.html" },
+        { label: "the slop catalog", url: "https://sloplabs.tech/slop.html" },
       ],
     },
     {
@@ -546,7 +559,7 @@ window.SITE = {
     paragraphs: [
       "i'm an MD student at [USC Keck](https://keck.usc.edu/). before that i did a BS in biology and an MS in bioengineering at Stanford, and spent most of that time in Andrew Fire's lab figuring out how to find the ends of DNA molecules in sequencing data.",
       "now my research is mostly about emotion in language models: what's going on inside them, and whether they can stand in for people on psych questionnaires. that's with [Ralph Adolphs](https://emotion.caltech.edu/) at Caltech. i also like building tools for myself and then finding out if anyone else wants them.",
-      "on the startup side i'm CSO at [Cosmora](https://www.cosmorahealth.com/) (before that i co-founded a precision-health startup in 2025), and i've spent a lot of the last two years around early biotech founders through [Nucleate LA](https://nucleate.org/chapters/los-angeles/). outside all that i dj and lift, and i'll show up to pretty much any hackathon.",
+      "on the startup side i'm clinical AI lead at [Coherence Health](https://coherencehealth.io), building an AI functional-medicine doctor, and CSO at [Cosmora](https://www.cosmorahealth.com/) (before that i co-founded a precision-health startup in 2025), and i've spent a lot of the last two years around early biotech founders through [Nucleate LA](https://nucleate.org/chapters/los-angeles/). outside all that i dj and lift, and i'll show up to pretty much any hackathon.",
     ],
     education: [
       { title: "Keck School of Medicine of USC", sub: "MD student" },
